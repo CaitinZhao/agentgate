@@ -1,0 +1,47 @@
+# AgentGate evaluation environment (GitHub flow: clone both repos side by side, then
+#   docker compose up -d --build          # platform only
+#   docker compose --profile agent up -d --build   # platform + the sample agent
+# First launch prints the owner password once:  docker compose logs agentgate | grep -i password
+# Data persists in ./data (platform db + banks/ + results/). The FinanceBench PDF corpus
+# (deploy/fb_pdfs/) is mounted read-only into the agent, never baked into the image.
+#
+# The agent under test can live anywhere reachable; in this compose network it exports
+# traces to http://agentgate:4318 and records LLM traffic via http://agentgate:8300/v1
+# (see the jiuwen-agent service env below).
+services:
+  agentgate:
+    build:
+      context: ..
+      dockerfile: agentgate/Dockerfile.web
+    container_name: agentgate-web
+    ports:
+      - "8030:8030"     # REST API + web UI
+      - "4318:4318"     # resident OTLP receiver (agents export traces here)
+      - "8300:8300"     # resident LLM recording proxy
+    environment:
+      OWNER_PASSWORD: ${OWNER_PASSWORD:-}
+      AGENTGATE_PROXY_UPSTREAM: ${AGENTGATE_PROXY_UPSTREAM:-}          # real LLM gateway (/v1)
+      AGENTGATE_PROXY_AGENT_URL: ${AGENTGATE_PROXY_AGENT_URL:-http://agentgate:8300/v1}
+      AGENTGATE_CORS_ORIGINS: ${AGENTGATE_CORS_ORIGINS:-http://localhost:5173}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+
+  jiuwen-agent:
+    profiles: ["agent"]
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    container_name: jiuwen-agent
+    ports:
+      - "8200:8200"
+    environment:
+      AGENT_ID: jiuwen-sample-agent
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://agentgate:4318
+    env_file:
+      - path: ./tests/fixtures/.env
+        required: false          # create it with the agent's LLM credentials (LLM_BASE_URL/...)
+    volumes:
+      - ./deploy/fb_pdfs:/app/fb_data:ro   # FinanceBench corpus (fetch separately)
+      - ./tests/fixtures/data:/app/data    # mock bank data (reports.json) + fb page cache
+    restart: unless-stopped

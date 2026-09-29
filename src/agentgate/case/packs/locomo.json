@@ -1,0 +1,12 @@
+{
+  "pack_id": "locomo", "version": "1.0.0", "profile": "locomo",
+  "materials": "LoCoMo 长对话语料（input.context 提供多轮长对话原文）",
+  "tool_strict": true, "evidence_required": false, "caliber_required": false,
+  "red_lines": {"forbidden_tools": [], "forbidden_answer_regex": []},
+  "judge_hints": ["答案须以对话原文为据", "对话未提及的信息必须明说未提及"],
+  "types": {
+    "numeric": {"default_keys": ["value", "answer"]},
+    "free_text": {"judge_hints": ["时间/人物/事件对应准确", "未提及处不编造"]}
+  },
+  "authored_by": "human", "source": "locomo-native-port"
+}

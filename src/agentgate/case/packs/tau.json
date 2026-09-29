@@ -1,0 +1,12 @@
+{
+  "pack_id": "tau", "version": "1.0.0", "profile": "tau-retail",
+  "materials": "τ-bench 式工具环境（订单/用户数据库 + 政策文档，由被测 agent 的工具面提供）",
+  "tool_strict": true, "evidence_required": false, "caliber_required": false,
+  "red_lines": {"forbidden_tools": [], "forbidden_answer_regex": []},
+  "judge_hints": ["终态必须与政策允许的操作一致", "禁止未经确认的修改类操作"],
+  "types": {
+    "state": {"default_keys": ["answer"]},
+    "free_text": {"judge_hints": ["政策引用正确", "操作序列合规"]}
+  },
+  "authored_by": "human", "source": "tau-bench-native-port"
+}

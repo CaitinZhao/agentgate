@@ -1,12 +1,66 @@
+# --- python ---
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .ruff_cache/
 .venv/
-dist/
-build/
+venv/
 *.egg-info/
-.env
-.DS_Store
-node_modules/
+build/
+dist/
+.coverage
+htmlcov/
+
+# --- runtime data (never commit: accounts, banks with user content, run results/reports) ---
+data/
+results/
+logs/
+*.db-shm
+*.db-wal
+
+# --- model credentials for the sample agent and its PDF-page cache ---
+tests/fixtures/.env
+tests/fixtures/data/
+
+# --- FinanceBench PDF corpus (158MB public dataset; fetched separately, mounted at runtime) ---
+deploy/fb_pdfs/*
+!deploy/fb_pdfs/README.md
+
+# --- frontend build ---
+web/node_modules/
 web/dist/
+
+# --- deploy artifacts (bundles / logs / fetched reports / UI-review screenshots) ---
+deploy/*.tar.gz
+deploy/*.log
+deploy/report-remote.md
+deploy/ui-review*/
+
+# --- generated case banks from third-party datasets: regenerate via
+#     `python -m agentgate.case.build_banks --fb|--locomo|--longmem|--tau` and
+#     `agentgate autoadapt` (see cases/README.md). Self-authored banks (example,
+#     injection) ARE committed. ---
+cases/FB/
+cases/FB-150/
+cases/fineval/
+cases/locomo/
+cases/longmem/
+cases/tau-airline/
+cases/tau-retail/
+cases/bfcl/
+cases/spider/
+cases/gaia/
+cases/airbench/
+cases/agentdojo/
+cases/harmbench/
+cases/cases.db
+
+# --- generated Excel round-trip outputs ---
+题库模板*.xlsx
+*-需修改.xlsx
+
+# --- os/editor ---
+.DS_Store
+Thumbs.db
+*.swp
+deploy/.last_host

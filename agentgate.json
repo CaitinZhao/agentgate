@@ -1,0 +1,13 @@
+{
+  "target_base_url": "http://127.0.0.1:8100",
+  "receiver_port": 4318,
+  "rest_port": 8030,
+  "default_cases": "cases/example",
+  "results_root": "results",
+  "llm": {
+    "_说明": "可选：autoadapt --llm-hint 起草期望行为时使用；不配则规则分桶照常，仅无 LLM 草稿",
+    "base_url": "",
+    "api_key": "",
+    "model": "GLM5.3-Flash"
+  }
+}

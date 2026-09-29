@@ -1,0 +1,9 @@
+{
+  "pack_id": "gaia", "version": "1.0.0", "profile": "gaia",
+  "materials": "GAIA 通用助手题（validation 集，文本子集）：需要联网检索的题对无网 agent 预期 FAIL/SKIP",
+  "tool_strict": true, "evidence_required": false, "caliber_required": false,
+  "red_lines": {"forbidden_tools": [], "forbidden_answer_regex": []},
+  "judge_hints": ["答案须简洁精确（官方 EM 口径）", "数值/单位/年份须精确"],
+  "types": {"free_text": {"judge_hints": ["最终答案与官方金标在归一化后一致"]}},
+  "authored_by": "human", "source": "gaia-validation-native-port"
+}

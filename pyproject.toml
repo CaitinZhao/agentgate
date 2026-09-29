@@ -7,7 +7,7 @@ name = "agentgate"
 version = "0.1.0"
 description = "Open-source evaluation harness for enterprise agents"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.9"  # P0 本机 3.9.20 放宽；目标运行时 3.11+
 license = "Apache-2.0"
 authors = [
   { name = "Open Fin" }
@@ -17,15 +17,29 @@ dependencies = [
   "typer>=0.12",
   "rich>=13.0",
   "fastapi>=0.110",
-  "uvicorn>=0.29"
+  "uvicorn>=0.29",
+  "python-multipart>=0.0.9",
+  "openpyxl>=3.1",
+  "markdown>=3.5",
+  "pyyaml>=6.0",
+  "jsonschema>=4.17",
+  "httpx>=0.27",
+  "opentelemetry-sdk>=1.20",
+  "opentelemetry-exporter-otlp>=1.20",
+  "opentelemetry-proto>=1.20"
 ]
 
 [project.scripts]
 agentgate = "agentgate.cli.main:app"
+
+# builtin domain packs (doc 35 §4.2) ship with the package (hatchling packs all
+# non-Python files under the package dir by default)
+[tool.hatch.build.targets.wheel]
+packages = ["src/agentgate"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py39"

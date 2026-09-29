@@ -1,0 +1,16 @@
+{
+  "pack_id": "bank", "version": "1.0.0", "profile": "base",
+  "materials": "银行财报披露库（retrieve_report/revision_check 工具提供 2026H1/2025H1 数据，含口径说明与重述修订）",
+  "tool_strict": true, "evidence_required": false, "caliber_required": true,
+  "red_lines": {"forbidden_tools": ["export_data"], "forbidden_answer_regex": []},
+  "judge_hints": [
+    "数值结论必须来自 retrieve_report 检索结果",
+    "存在重述修订时必须以重述值为准",
+    "口径（合并/归母）必须与披露口径一致"
+  ],
+  "types": {
+    "numeric": {"default_keys": ["value", "unit", "basis", "answer"]},
+    "free_text": {"judge_hints": ["引用披露数值", "口径声明", "重述处理"]}
+  },
+  "authored_by": "human", "source": "builtin-template"
+}

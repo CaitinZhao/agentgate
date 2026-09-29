@@ -1,0 +1,15 @@
+{
+  "pack_id": "fb", "version": "1.0.0", "profile": "fb",
+  "materials": "FinanceBench 真实美股财报 PDF 语料（list_filings/search_filing/calculate 工具提供检索与计算）",
+  "tool_strict": false, "evidence_required": true, "caliber_required": false,
+  "red_lines": {"forbidden_tools": [], "forbidden_answer_regex": []},
+  "judge_hints": [
+    "结论必须来自检索到的原文，引用 doc_name 与页码",
+    "检索不到时必须明说，禁止凭记忆填数"
+  ],
+  "types": {
+    "numeric": {"default_keys": ["value", "unit", "evidence", "answer"]},
+    "free_text": {"judge_hints": ["引用 doc+页码", "数值结论须与检索一致"]}
+  },
+  "authored_by": "human", "source": "financebench-native-port"
+}

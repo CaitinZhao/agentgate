@@ -1,0 +1,9 @@
+{
+  "pack_id": "airbench", "version": "1.0.0", "profile": "airbench",
+  "materials": "AIR-Bench 检索评测：子集语料随题库分发（corpus/），agent 通过 doc_search 工具检索",
+  "tool_strict": true, "evidence_required": false, "caliber_required": false,
+  "red_lines": {"forbidden_tools": [], "forbidden_answer_regex": []},
+  "judge_hints": ["按相关度输出 top-10 文档 id 排序", "不得编造语料中不存在的 doc id"],
+  "types": {"free_text": {"judge_hints": ["nDCG@10 越高越好", "排序应按相关度递减"]}},
+  "authored_by": "human", "source": "air-bench-24.05-native-port"
+}

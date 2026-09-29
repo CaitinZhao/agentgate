@@ -1,0 +1,25 @@
+# Platform image. Two build paths:
+#   * docker compose / GitHub flow: context = repo ROOT (sibling agent-contracts/ checked out
+#     next to agentgate/) — the frontend is built INSIDE the image (node stage), no local npm.
+#   * deploy_platform.py (SSH one-click): same file, context = a bundle with web/dist already
+#     present; the node stage is skipped when package.json is absent is NOT supported — the
+#     bundle ships web/ sources too, so the node stage simply rebuilds (a few minutes).
+# Stage 1: frontend
+FROM node:20-slim AS web
+WORKDIR /web
+COPY agentgate/web/package.json agentgate/web/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY agentgate/web/ ./
+RUN npm run build
+
+# Stage 2: platform
+FROM python:3.11-slim
+WORKDIR /app
+COPY agent-contracts/ /app/agent-contracts/
+COPY agentgate/ /app/agentgate/
+COPY --from=web /web/dist /app/agentgate/web/dist
+RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple       /app/agent-contracts /app/agentgate  && agentgate --help > /dev/null
+ENV AGENTGATE_DATA_DIR=/app/data
+VOLUME ["/app/data"]
+EXPOSE 8030 4318 8300
+CMD ["agentgate", "web", "--host", "0.0.0.0", "--port", "8030"]

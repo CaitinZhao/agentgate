@@ -1,0 +1,12 @@
+{
+  "pack_id": "generic", "version": "1.0.0", "profile": "",
+  "materials": "无特殊材料要求",
+  "tool_strict": true, "evidence_required": false, "caliber_required": false,
+  "red_lines": {"forbidden_tools": [], "forbidden_answer_regex": []},
+  "judge_hints": ["答案需直接回应题面", "不得编造材料中不存在的信息"],
+  "types": {
+    "numeric": {"default_keys": ["value", "answer"]},
+    "free_text": {"judge_hints": ["要点覆盖度", "表述准确性"]}
+  },
+  "authored_by": "human", "source": "builtin-template"
+}

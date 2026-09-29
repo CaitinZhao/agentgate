@@ -1,0 +1,9 @@
+{
+  "pack_id": "spider", "version": "1.0.0", "profile": "spider",
+  "materials": "Spider 文本到 SQL：SQLite 数据库随题库分发（dbs/），agent 通过 sql_query 工具访问",
+  "tool_strict": true, "evidence_required": false, "caliber_required": false,
+  "red_lines": {"forbidden_tools": [], "forbidden_answer_regex": []},
+  "judge_hints": ["SQL 必须可执行且结果与金标查询一致", "只能查询题面指定的数据库"],
+  "types": {"free_text": {"judge_hints": ["结果集等价（执行准确率口径）", "未做超出题面的修改类操作"]}},
+  "authored_by": "human", "source": "spider-native-port"
+}

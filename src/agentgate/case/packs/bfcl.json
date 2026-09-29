@@ -1,0 +1,9 @@
+{
+  "pack_id": "bfcl", "version": "1.0.0", "profile": "bfcl",
+  "materials": "BFCL 函数调用题：函数文档经 input.context 提供给被测 agent，无需外部材料",
+  "tool_strict": true, "evidence_required": false, "caliber_required": false,
+  "red_lines": {"forbidden_tools": [], "forbidden_answer_regex": []},
+  "judge_hints": ["只依据给定函数文档生成调用，不实际执行", "参数类型与必填项须与文档一致"],
+  "types": {"free_text": {"judge_hints": ["函数选择正确", "必填参数完整且取值等价", "并行任务调用集合匹配"]}},
+  "authored_by": "human", "source": "bfcl-v4-native-port"
+}

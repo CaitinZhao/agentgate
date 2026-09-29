@@ -8,7 +8,7 @@ import { marked } from "marked";
 import { api } from "../store";
 import ScoreRadar from "../components/ScoreRadar.vue";
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const route = useRoute();
 const ids = computed(() => (route.query.ids as string || "").split(",").filter(Boolean));
 const result = ref<any>(null);
@@ -34,7 +34,7 @@ function delta(a: number | null, b: number | null): number | null {
 onMounted(async () => {
   if (ids.value.length < 2) { err.value = t("compare.needTwo"); return; }
   try {
-    result.value = await api("POST", "/compare", { run_ids: ids.value, lang: "zh" });
+    result.value = await api("POST", "/compare", { run_ids: ids.value, lang: locale.value });
   } catch (e: any) { err.value = e.message; }
   // scores for the radar overlay (missing files / legacy runs degrade gracefully)
   for (const [i, rid] of ids.value.slice(0, 2).entries()) {
@@ -89,6 +89,6 @@ onMounted(async () => {
 
   <template v-if="result">
     <div class="card muted">{{ $t("compare.transferHint") }}</div>
-    <div class="card md-body" v-html="md(result.report_zh)"></div>
+    <div class="card md-body" v-html="md(locale === 'en' ? result.report_en : result.report_zh)"></div>
   </template>
 </template>

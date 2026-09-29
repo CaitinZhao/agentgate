@@ -92,7 +92,8 @@ def build_report(results: List[Dict], gate: Dict, meta: Dict, lang: str = "zh") 
             continue
         n_fail += 1
         el = r.get("error_localization") or {}
-        kind = str(el.get("failure_kind") or "other")
+        # diagnosis_hint.failure_kind may carry a descriptive tail; aggregate by the id
+        kind = str(el.get("failure_kind") or "other").split("：")[0].split(":")[0].strip() or "other"
         kinds[kind] = kinds.get(kind, 0) + 1
     if n_fail:
         lines.append(("## 失败归因分布（%d 题失败；逐题细节见逐题结果）" % n_fail) if zh else

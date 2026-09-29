@@ -775,7 +775,10 @@ def _rebuild_base_reports(run: dict, out_dir: Path) -> dict:
             marker = "## AI 摘要与改进建议" if lang == "zh" else "## AI Summary"
             idx = old.find(marker)
             if idx != -1:
-                preserved[lang] = old[idx:].strip()
+                # preserve ONLY the AI section (up to the next top-level heading),
+                # never the rest of the old report body
+                nxt = old.find(chr(10) + "## ", idx + 10)
+                preserved[lang] = old[idx:nxt if nxt != -1 else len(old)].strip()
             rp.write_text(build_report(results, gate, meta, lang=lang), encoding="utf-8")
     except Exception:
         pass

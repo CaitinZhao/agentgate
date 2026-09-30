@@ -81,8 +81,13 @@ def red_line_scan(case, response, trace, pack: Dict, analysis: Optional[Dict]) -
 
 
 def _check_final(case, response, pack: Dict, assets_roots=None,
-                 native: Optional[Dict] = None) -> (bool, List[VerifierResult], Dict):
-    """Step 1+2: pack format keys (quality deductions) + typed final compare (verdict)."""
+                 native: Optional[Dict] = None, sandbox=None) -> (bool, List[VerifierResult], Dict):
+    """Step 1+2: pack format keys (quality deductions) + typed final compare (verdict).
+
+    `sandbox` is a live platform-managed environment handle (state cases): when the
+    case declares env assertions but no handle reached the judge, the verdict is
+    undecided (None -> PENDING) — never guessed from the agent's self-report.
+    """
     ctype = case.effective_type()
     final = response.get("final_json") or {}
     answer = str(response.get("answer_text", ""))
@@ -210,9 +215,25 @@ def _check_final(case, response, pack: Dict, assets_roots=None,
 
     if ctype == "state":
         assertions = gfinal.get("assertions") or []
+        env_asserts = [a for a in assertions if isinstance(a, dict)
+                       and (a.get("read_file") or a.get("exec"))]
+        path_asserts = [a for a in assertions if not (isinstance(a, dict)
+                                                      and (a.get("read_file") or a.get("exec")))]
         if not assertions:
             return None, results, quality
-        for a in assertions:
+        # env assertions: evaluated against the platform-managed sandbox (P1).
+        # No handle -> undecided; the agent's self-report can never satisfy them.
+        if env_asserts:
+            from ..sandbox import verify as _sb_verify
+            env_out = _sb_verify.verify_final_state(case, sandbox)
+            if env_out is None:
+                return None, results, quality
+            env_ok, env_results = env_out
+            results.extend(env_results)
+            if not env_ok:
+                return False, results, quality
+        # legacy path assertions: a walk over the agent's own final_json
+        for a in path_asserts:
             node: object = final
             for part in str(a.get("path", "")).split("."):
                 if isinstance(node, dict) and part in node:
@@ -269,7 +290,7 @@ def _broken_chain(raw_spans: List[Dict]) -> int:
 
 def judge_case(case, response, trace, pack: Dict, analysis: Optional[Dict] = None,
                raw_spans: Optional[List[Dict]] = None,
-               tool_blob: str = "", assets_roots=None) -> Dict:
+               tool_blob: str = "", assets_roots=None, sandbox=None) -> Dict:
     """Run the hard layer. Returns a JudgeOutcome dict (see module docstring)."""
     from ..analysis import native_scoring as _ns
     native: Optional[Dict] = None
@@ -281,7 +302,8 @@ def judge_case(case, response, trace, pack: Dict, analysis: Optional[Dict] = Non
         except Exception:
             native = None
     p0 = red_line_scan(case, response, trace, pack, analysis)
-    final_ok, checks, quality = _check_final(case, response, pack, native=native)
+    final_ok, checks, quality = _check_final(case, response, pack, native=native,
+                                             sandbox=sandbox)
     ctype = case.effective_type()
 
     checkpoints = _hit_checkpoints(case, response, trace, tool_blob) \

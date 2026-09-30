@@ -21,6 +21,14 @@ DEFAULTS = {
     "default_cases": "cases/example",
     "results_root": "results",
     "data_dir": "data",      # web platform data root: agentgate.db + banks/ + results/ (outside src)
+    # P1 sandbox (state cases with gold.final.sandbox): provider off = pre-P1 behavior
+    "sandbox": {
+        "provider": "off",               # off | docker | subprocess
+        "image": "python:3.11-slim",     # docker default image (case spec may override)
+        "network": "",                   # docker --network (optional)
+        "exec_base_url": "",             # agent-reachable platform URL; empty = localhost:rest_port
+        "ttl_s": 1800,                   # exec-registry token TTL
+    },
 }
 
 

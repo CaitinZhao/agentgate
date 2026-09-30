@@ -19,7 +19,29 @@ from ..result.export.json_report import export as export_json
 from ..result.gates import evaluate_gate
 from ..result.report import build_report
 from ..run.engine import RunEngine
+from ..sandbox import registry as sb_registry
+from ..sandbox.base import sandbox_spec
 from ..trace.receivers.otlp_http import OTLPHTTPReceiver
+
+
+def _inject_sandbox_context(case, token: str, base_url: str = None) -> None:
+    """Tell the agent (via input.context) how to reach this case's sandbox exec API.
+
+    The token is unguessable and dies with the case, so the agent can only touch its
+    own environment; nothing else about the platform is exposed on that endpoint.
+    base_url: agent-reachable platform address; None = derive from agentgate.json.
+    """
+    from ..config import load_config
+    cfg = load_config()
+    sb_cfg = cfg.get("sandbox") or {}
+    base = base_url or sb_cfg.get("exec_base_url")         or "http://127.0.0.1:%d" % cfg.get("rest_port", 8030)
+    url = base.rstrip("/") + "/api/v1/sandbox/exec"
+    note = ("[沙箱终端] 本题的命令执行环境由平台托管。执行命令：POST %s，"
+            "JSON body {\"token\": \"%s\", \"cmd\": \"<shell 命令>\"}，"
+            "返回 {\"exit_code\", \"stdout\", \"stderr\"}；写文件用重定向"
+            "（cat > 路径 <<'EOF' ... EOF）。" % (url, token))
+    ctx = case.input.get("context")
+    case.input["context"] = (str(ctx) + "\n\n" + note) if ctx else note
 
 
 def _expand_context(cases, search_roots):
@@ -166,7 +188,8 @@ def run_case_set(cases_dir, target, out_dir, receiver_port: int = 4318,
                  on_case_done=None, cancel_check=None, search_roots=None,
                  proxy_sink: str = None, data_root: Path = None,
                  repeat_k: int = 1, ai_cfg: Dict = None,
-                 trace_wait_s: float = 15.0) -> Dict:
+                 trace_wait_s: float = 15.0, sandbox_provider=None,
+                 sandbox_exec_url: str = None) -> Dict:
     """Run a set of cases: invoke -> judge -> gate -> six-dimension scores -> bilingual reports.
 
     Case source (first match wins): cases_list (pre-resolved Case objects — the web worker
@@ -177,7 +200,10 @@ def run_case_set(cases_dir, target, out_dir, receiver_port: int = 4318,
     JSONL path), data_root (user pack lookup), repeat_k (stability repeats, default 1),
     ai_cfg (per-user LLM config {base_url, api_key, model, auto_adopt} — None = AI off),
     trace_wait_s (per-case wait for asynchronously exported spans — the worker derives it
-    from the agent's /capabilities "traces" flag).
+    from the agent's /capabilities "traces" flag), sandbox_provider (P1 sandbox: None =
+    state cases with a sandbox spec stay PENDING; when set, state cases declaring
+    gold.final.sandbox get a live environment, the exec endpoint injected into their
+    input context, and their env assertions judged deterministically).
     """
     if cases_list is not None:
         cases = list(cases_list)
@@ -238,6 +264,20 @@ def run_case_set(cases_dir, target, out_dir, receiver_port: int = 4318,
             pack = pack_reg.resolve_pack(case, data_root=data_root)
             t0 = _time.time()
             analysis: Dict = {}
+            # platform-managed sandbox for state cases that declare gold.final.sandbox:
+            # opened before the invoke (the agent needs the exec endpoint in its input),
+            # closed after judging. A broken create falls back to PENDING, never fails the run.
+            sb_handle, sb_token = None, ""
+            if sandbox_provider is not None and sandbox_spec(case):
+                try:
+                    sb_handle = sandbox_provider.create(sandbox_spec(case))
+                    sb_token = sb_registry.register(sb_handle)
+                    _inject_sandbox_context(case, sb_token, sandbox_exec_url)
+                except Exception as _sb_e:
+                    print("sandbox create failed (%s): %s" % (case.case_id, _sb_e))
+                    if sb_handle is not None:
+                        sandbox_provider.close(sb_handle)
+                    sb_handle, sb_token = None, ""
             reps = []                    # per-repeat: (CaseRun|None, wall, mcalls)
             try:
                 for rep in range(repeat_k):
@@ -265,7 +305,7 @@ def run_case_set(cases_dir, target, out_dir, receiver_port: int = 4318,
                     er, judge_out = evaluate_case(
                         case, r0.response, r0.trace, reps[0][1], pack=pack,
                         analysis=analysis, raw_spans=r0.raw_spans, tool_blob=tool_blob,
-                        assets_roots=search_roots)
+                        assets_roots=search_roots, sandbox=sb_handle)
                 except Exception as e:
                     er, judge_out = _error_result(case, e, reps[0][1], error_kind="judge")
                     analysis = {}
@@ -291,7 +331,7 @@ def run_case_set(cases_dir, target, out_dir, receiver_port: int = 4318,
                         _er, _jo = evaluate_case(
                             case, ri.response, ri.trace, _w, pack=pack, analysis=_a,
                             raw_spans=ri.raw_spans, tool_blob=_tool_blob(ri.model_calls),
-                            assets_roots=search_roots)
+                            assets_roots=search_roots, sandbox=sb_handle)
                         verdicts.append(_jo.get("verdict"))
                     except Exception:
                         verdicts.append("ERROR")
@@ -303,6 +343,12 @@ def run_case_set(cases_dir, target, out_dir, receiver_port: int = 4318,
                 judge_out["stability_detail"] = "%s；%s" % (detail, same)
                 er.ASI = (er.ASI + "\n[stability] repeat_k=%d: %s；%s → 稳定 %.0f" %
                           (repeat_k, detail, same, stability)).strip()
+            # sandbox teardown: the exec endpoint dies with the token — the agent
+            # cannot touch a previous case's environment
+            if sb_handle is not None:
+                sb_registry.unregister(sb_token)
+                sandbox_provider.close(sb_handle)
+                sb_handle = None
             er.run_id = out.name
             if r0 is not None:
                 mcalls_all = [m for (_, _, ms) in reps for m in ms]

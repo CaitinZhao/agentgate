@@ -17,7 +17,7 @@ from .builtin import trajectory as trajectory_evidence
 
 def evaluate_case(case, response, trace, wall_time_s: float, pack: Dict = None,
                   analysis: Dict = None, raw_spans: List[Dict] = None,
-                  tool_blob: str = "", assets_roots=None) -> Tuple[EvalResult, Dict]:
+                  tool_blob: str = "", assets_roots=None, sandbox=None) -> Tuple[EvalResult, Dict]:
     if pack is None:                      # default: resolve the case's own domain pack
         from ..case import packs as pack_reg
         pack = pack_reg.resolve_pack(case)
@@ -26,7 +26,7 @@ def evaluate_case(case, response, trace, wall_time_s: float, pack: Dict = None,
                             else "misc"))
     version = case.eval_set_version or (suite + "-v0.1")
     out = judging.judge_case(case, response, trace, pack or {}, analysis, raw_spans,
-                             tool_blob, assets_roots=assets_roots)
+                             tool_blob, assets_roots=assets_roots, sandbox=sandbox)
 
     # det_pass keeps the historical meaning "no hard check failed": PENDING (free_text)
     # cases stay det_pass=True and are distinguished by human_review="pending" — the gate,

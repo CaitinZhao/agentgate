@@ -18,6 +18,19 @@ from . import banks, db
 
 VALID_LEVELS = {"L0", "L1", "L2"}
 
+_sandbox_provider = None                  # built once per worker process
+
+
+def _sandbox_provider():
+    """The configured P1 sandbox provider ("off" -> None: pre-P1 behavior)."""
+    global _sandbox_provider
+    if _sandbox_provider is None:
+        from ..config import load_config
+        from ..sandbox import provider as sb_provider_mod
+        _sandbox_provider = sb_provider_mod.from_config(
+            (load_config().get("sandbox") or {}) or None)
+    return _sandbox_provider
+
 
 def make_target(url: str, llm_base_url: str = ""):
     """Target factory (module-level so tests can monkeypatch it with an offline MockTarget).
@@ -310,7 +323,8 @@ class Worker(threading.Thread):
                                    ai_cfg=ai_cfg,
                                    trace_wait_s=_trace_wait_s(
                                        agent_capabilities(run["target_url"])
-                                       if run.get("target_url") else None))
+                                       if run.get("target_url") else None),
+                                   sandbox_provider=_sandbox_provider())
         except Exception as e:
             traceback.print_exc()          # full stack in docker logs; runs.error keeps the repr
             db.update_run(rid, status="failed", finished_at=db.now(), error=repr(e)[:500])

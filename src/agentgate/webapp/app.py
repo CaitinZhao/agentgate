@@ -78,6 +78,8 @@ def create_app(data_dir: str = None, worker_poll: float = 2.0,
     app.include_router(content_routes.router)
     app.include_router(run_routes.router)
     app.include_router(admin_routes.router)
+    from .routes import sandbox_routes
+    app.include_router(sandbox_routes.router)
 
     state = {"receiver": None, "worker": None, "proxy_server": None}
 

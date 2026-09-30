@@ -1,0 +1,78 @@
+[
+ {
+  "case_id": "sandbox-demo-report",
+  "version": 1,
+  "suite": "sandbox-demo",
+  "status": "active",
+  "level": "L1",
+  "source": {
+   "origin": "self-authored",
+   "provenance": "P1 沙箱示例：平台托管环境，终态断言=read_file 的 json_path + exec 的 exit_code"
+  },
+  "input": {
+   "query": "平台为你托管了一个终端沙箱（用法见上下文）。请读取 /app/in/task.txt，然后在 /app/out/ 目录下创建 report.json，内容为 JSON：{\"status\": \"done\", \"task\": \"monthly\"}，并把 /app/in/task.txt 原样复制为 /app/out/task.bak。"
+  },
+  "type": "state",
+  "gold": {
+   "final": {
+    "sandbox": {
+     "image": "python:3.11-slim",
+     "setup": [
+      {"cmd": "mkdir -p /app/in /app/out"},
+      {"write_file": {"path": "/app/in/task.txt", "content": "monthly report data v1"}}
+     ]
+    },
+    "assertions": [
+     {"read_file": "/app/out/report.json", "json_path": "status", "equals": "done"},
+     {"read_file": "/app/out/report.json", "json_path": "task", "equals": "monthly"},
+     {"exec": "test -f /app/out/task.bak", "exit_code": 0},
+     {"exec": "diff -q /app/in/task.txt /app/out/task.bak", "exit_code": 0}
+    ]
+   },
+   "checkpoints": [],
+   "rubric": []
+  },
+  "diagnosis_hint": {
+   "failure_kind": "environment_state_miss",
+   "target_layer": "environment",
+   "expected_behavior": "在托管沙箱内完成文件读写，终态满足四条断言"
+  }
+ },
+ {
+  "case_id": "sandbox-demo-summary",
+  "version": 1,
+  "suite": "sandbox-demo",
+  "status": "active",
+  "level": "L1",
+  "source": {
+   "origin": "self-authored",
+   "provenance": "P1 沙箱示例：验证 Agent 把处理结果写回沙箱文件系统"
+  },
+  "input": {
+   "query": "读取 /app/in/lines.txt（每行一个词），统计共有多少行，把结果以文本 'lines=<数量>' 写入 /app/out/count.txt，并在最终答复里说明数量。"
+  },
+  "type": "state",
+  "gold": {
+   "final": {
+    "sandbox": {
+     "image": "python:3.11-slim",
+     "setup": [
+      {"cmd": "mkdir -p /app/in /app/out"},
+      {"write_file": {"path": "/app/in/lines.txt", "content": "alpha\nbeta\ngamma\ndelta"}}
+     ]
+    },
+    "assertions": [
+     {"read_file": "/app/out/count.txt", "contains": "lines=4"},
+     {"exec": "wc -l < /app/out/count.txt", "exit_code": 0}
+    ]
+   },
+   "checkpoints": [],
+   "rubric": []
+  },
+  "diagnosis_hint": {
+   "failure_kind": "environment_state_miss",
+   "target_layer": "environment",
+   "expected_behavior": "统计 4 行并写回 count.txt"
+  }
+ }
+]

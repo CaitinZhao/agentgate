@@ -6,11 +6,9 @@
 
 # AgentGate
 
-AgentGate 是一个**开源的企业 Agent 评测 harness**（open-source evaluation harness for
-enterprise agents）：把要考察的问题整理成**题库**，对着被测 Agent **发起评测**，自动
-**判定对错、分析轨迹、给出六维评分和诊断报告**，作为 Agent 版本能否上线的依据。
+AgentGate 是一个开源的企业 Agent 评测系统。
 
-![题库列表](docs/images/02-banks.png)
+![诊断报告](docs/images/08-run-report.png)
 
 ## 它能做什么
 
@@ -24,7 +22,6 @@ enterprise agents）：把要考察的问题整理成**题库**，对着被测 A
 | AI 辅助（可选） | 报告 AI 摘要、失败题根因、free_text 题 judge 建议、出题与领域包起草 |
 | 权限与多用户 | owner / admin / member / viewer 四级角色；公共题库上每人可有自己的跑法 |
 
-![六维雷达与诊断卡](docs/images/07-run-radar.png)
 
 ## 5 分钟上手
 
@@ -42,8 +39,6 @@ docker compose --profile agent up -d --build               # 可选：样例被�
 `http://jiuwen-agent:8200` → 提交 → 执行详情页看六维雷达。
 完整的**建库 → 评测 → 报告**图文演示见 [demo 演示](docs/zh/demo.md)；
 环境细节与离线部署见 [环境准备与一键部署](docs/zh/deployment.md)。
-
-![诊断报告](docs/images/08-run-report.png)
 
 ## 文档索引
 

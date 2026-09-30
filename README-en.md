@@ -6,12 +6,9 @@ English（this page） | [简体中文](README.md)
 
 # AgentGate
 
-AgentGate is an **open-source evaluation harness for enterprise agents**: organize the
-questions you care about into **case banks**, launch **evaluation runs** against the agent
-under test, and get automatic **verdicts, trajectory analysis, six-dimension scores and
-diagnostic reports** as the evidence for release decisions.
+AgentGate is an open-source evaluation system for enterprise agents.
 
-![Banks](docs/images/02-banks.png)
+![Diagnostic report](docs/images/08-run-report.png)
 
 ## What it does
 
@@ -25,7 +22,6 @@ diagnostic reports** as the evidence for release decisions.
 | AI assist (optional) | Report summary, failure root causes, judge suggestions, case & domain-pack drafting |
 | Roles | owner / admin / member / viewer; per-user "my way of running" on public banks |
 
-![Radar](docs/images/07-run-radar.png)
 
 ## Quick start
 
@@ -44,7 +40,6 @@ Open `http://SERVER_IP:8030` -> sign in as owner -> launch a run against
 walkthrough with screenshots is in the [Demo](docs/en/demo.md); environment details and
 offline deployment in [Deployment](docs/en/deployment.md).
 
-![Report](docs/images/08-run-report.png)
 
 ## Documentation
 

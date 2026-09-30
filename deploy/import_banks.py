@@ -155,15 +155,32 @@ def import_one(http, cli, name: str) -> None:
 
 
 def main():
+    global DATA_DIR, CONTAINER_DATA
     ap = argparse.ArgumentParser()
     ap.add_argument("--banks", default=",".join(BANKS))
+    ap.add_argument("--data-dir", default=os.environ.get(
+        "AGENTGATE_DEPLOY_DATA_DIR", DATA_DIR),
+        help="宿主机数据目录（默认 /opt/agentgate-platform/data）")
+    ap.add_argument("--container-data-dir", default=os.environ.get(
+        "AGENTGATE_CONTAINER_DATA_DIR", CONTAINER_DATA),
+        help="容器内对应路径（默认 /app/data）")
     args = ap.parse_args()
+    DATA_DIR, CONTAINER_DATA = args.data_dir, args.container_data_dir
     for k in ("AGENTGATE_DEPLOY_HOST", "AGENTGATE_DEPLOY_USER", "AGENTGATE_DEPLOY_PASSWORD"):
         if not os.environ.get(k):
             fail("缺少环境变量 %s（部署目标凭据不入仓库）" % k)
     http = _client()
     _login(http)
     cli = _connect_sftp()
+    # detect the in-container data dir (matches the AGENTGATE_DATA_DIR the platform
+    # was started with) so staging paths always line up with --db paths
+    _, out, _ = cli.exec_command(
+        "docker exec agentgate-web printenv AGENTGATE_DATA_DIR 2>/dev/null || echo /app/data",
+        timeout=30)
+    detected = out.read().decode().strip()
+    if detected and detected != CONTAINER_DATA:
+        print("    容器内数据目录：%s" % detected)
+        CONTAINER_DATA = detected
     try:
         for name in [b.strip() for b in args.banks.split(",") if b.strip()]:
             if name not in BANKS:

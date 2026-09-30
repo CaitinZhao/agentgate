@@ -194,6 +194,20 @@ curl -s http://$AGENTGATE_DEPLOY_HOST:8030/api/v1/runs       # 队列与结果�
 | 报告保留天数 / 开放注册 | 30 天 / 开 | 平台设置页 | 即时 |
 | 数据目录、默认题库（CLI 侧） | — | 工作目录 `agentgate.json` | CLI 下次启动 |
 
+### 数据目录可以配吗
+
+分两层，配置方式不同：
+
+| 层 | 默认值 | 怎么配 |
+|---|---|---|
+| 容器内（平台进程读写的 /app/data） | /app/data | 启动平台时 AGENTGATE_DATA_DIR 环境变量、agentgate web --data-dir 或 agentgate.json 的 data_dir（方式 B 直接改 compose 挂载） |
+| 宿主机挂载目录（方式 A 部署脚本） | /opt/agentgate-platform/data | deploy_all.py / deploy_platform.py --data-dir <路径>，或环境变量 AGENTGATE_DEPLOY_DATA_DIR；import_banks.py --data-dir（容器内路径自动探测，也可 --container-data-dir 覆盖） |
+
+数据目录在**部署时**确定，运行期不可改（平台启动即绑定）；Web 端「用户中心 → 设置」
+对 owner 只读展示实际路径。改宿主机目录后重跑部署即可，旧目录数据不自动迁移
+（停容器 → 拷贝 → 带新 --data-dir 重启）。
+
+
 ## 7. 离线部署（服务器不能出公网）
 
 有网侧构建镜像（**CPU 架构必须与服务器一致**），导出后离线侧 load + 启动：

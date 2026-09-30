@@ -185,6 +185,8 @@ def main():
     ap.add_argument("--receiver-port", type=int, default=4318, help="OTLP 接收器端口（默认 4318）")
     ap.add_argument("--proxy-port", type=int, default=8300, help="录制代理端口（默认 8300）")
     ap.add_argument("--agent-port", type=int, default=8200, help="被测 Agent 宿主端口（默认 8200）")
+    ap.add_argument("--data-dir", default=os.environ.get("AGENTGATE_DEPLOY_DATA_DIR", ""),
+                    help="宿主机数据目录（挂载为容器 /app/data；默认 /opt/agentgate-platform/data）")
     args = ap.parse_args()
 
     t0 = time.time()
@@ -204,6 +206,8 @@ def main():
     if not args.skip_platform:
         step("3", "部署评测平台（Web UI :8030 / 接收器 :4318 / 录制代理 :8300）")
         cmd = [sys.executable, str(HERE / "deploy_platform.py")]
+        if args.data_dir:
+            cmd += ["--data-dir", args.data_dir]
         if args.skip_build:
             cmd.append("--skip-build")
         if args.owner_password:

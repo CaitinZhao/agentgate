@@ -31,6 +31,8 @@ HOST = os.environ.get("AGENTGATE_DEPLOY_HOST", "")
 USER = os.environ.get("AGENTGATE_DEPLOY_USER", "")
 PASSWORD = os.environ.get("AGENTGATE_DEPLOY_PASSWORD", "")
 REMOTE_ROOT = "/opt/agentgate-platform"
+# host-side data volume; override via AGENTGATE_DEPLOY_DATA_DIR or --data-dir
+DATA_DIR = os.environ.get("AGENTGATE_DEPLOY_DATA_DIR", REMOTE_ROOT + "/data")
 EVAL_ROOT = "/opt/agentgate"                # existing deploy_eval.py layout (.env.origin lives there)
 LOCAL_ROOT = Path(__file__).resolve().parents[2]
 BUNDLE = Path(__file__).resolve().parent / "platform-bundle.tar.gz"
@@ -146,6 +148,7 @@ def pull_image(r: Remote, image: str) -> str:
 
 
 def main():
+    global DATA_DIR
     ap = argparse.ArgumentParser()
     ap.add_argument("--owner-password", default="",
                     help="owner 初始密码（留空则随机生成并打印一次）")
@@ -158,17 +161,21 @@ def main():
                     help="消息级录制代理端口（默认 8300）")
     ap.add_argument("--agent-port", type=int, default=8200,
                     help="被测 Agent 端口（默认 8200；用于体检与提示信息）")
+    ap.add_argument("--data-dir", default=os.environ.get(
+        "AGENTGATE_DEPLOY_DATA_DIR", DATA_DIR),
+        help="宿主机数据目录（挂载为容器 /app/data；默认 /opt/agentgate-platform/data）")
     args = ap.parse_args()
 
     r = Remote()
     print("[0] 连接 %s（platform -> %s）" % (HOST, REMOTE_ROOT))
+    DATA_DIR = args.data_dir              # container mounts this host dir at /app/data
     owner_password = args.owner_password or secrets.token_urlsafe(12)
     printed_password = not args.owner_password   # auto-generated ones get printed
 
     if not args.skip_build:
         make_bundle()
         print("[2] 上传并解包 ...")
-        r.run("mkdir -p %s/data" % REMOTE_ROOT)
+        r.run("mkdir -p '%s'" % DATA_DIR)
         r.put(BUNDLE, REMOTE_ROOT + "/platform-bundle.tar.gz")
         r.run("cd %s && tar -xzf platform-bundle.tar.gz && rm platform-bundle.tar.gz" % REMOTE_ROOT)
 
@@ -200,13 +207,13 @@ def main():
     print("    proxy upstream = %s" % (gateway or "(未取到，稍后在设置页配置)"))
     code, _ = r.run(
         "docker run -d --name %s --network host "
-        "-v %s/data:/app/data "
+        "-v %s:/app/data "
         "-e OWNER_PASSWORD=%s "
         "-e AGENTGATE_PROXY_UPSTREAM=%s "
         "-e AGENTGATE_PROXY_AGENT_URL=http://172.17.0.1:%d/v1 "
         "-e AGENTGATE_RECEIVER_PORT=%d -e AGENTGATE_PROXY_PORT=%d "
         "%s agentgate web --host 0.0.0.0 --port %d"
-        % (CONTAINER, REMOTE_ROOT, _shq(owner_password),
+        % (CONTAINER, DATA_DIR, REMOTE_ROOT, _shq(owner_password),
            _shq(gateway), args.proxy_port, args.receiver_port, args.proxy_port,
            IMAGE, args.web_port), timeout=120)
     if code != 0:
@@ -251,7 +258,7 @@ def main():
               % CONTAINER)
     elif not bootstrapped:
         print("owner 账号沿用数据卷中的既有密码（OWNER_PASSWORD 未生效）")
-    print("数据卷： %s/data（agentgate.db + banks/ + results/）" % REMOTE_ROOT)
+    print("数据卷： %s（agentgate.db + banks/ + results/）" % DATA_DIR)
     print("端口：Web %d（UI）/ 接收器 %d（跨机 agent 轨迹）/ 录制代理 %d；Agent %d（:8200 默认）"
           % (args.web_port, args.receiver_port, args.proxy_port, args.agent_port))
     print("端口自定义：deploy_platform.py --web-port/--receiver-port/--proxy-port 重跑即可（env 每次启动覆盖设置表）")

@@ -108,9 +108,10 @@ def delete_user(username: str, user: dict = Depends(auth.require_roles("admin", 
 
 @router.get("/settings")
 def get_settings(user: dict = Depends(auth.require_roles("owner",))):
+    from ...webapp import db as _db
     return {k: db.get_setting(k, "") for k in
             ("proxy_upstream", "proxy_agent_url", "proxy_port", "receiver_port",
-             "report_retention_days", "registration_open")}
+             "report_retention_days", "registration_open")} |         {"data_dir": str(_db.data_root())}          # read-only: where runs/banks live
 
 
 @router.put("/settings")

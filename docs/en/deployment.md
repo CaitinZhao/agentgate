@@ -192,6 +192,21 @@ first.
 | Retention / registration | 30 days / open | Platform Settings | immediate |
 | Data dir, default bank (CLI side) | — | `agentgate.json` in the working dir | next CLI process |
 
+### Can the data directory be configured?
+
+Two layers, configured differently:
+
+| Layer | Default | How to configure |
+|---|---|---|
+| In-container (/app/data, what the platform reads/writes) | /app/data | AGENTGATE_DATA_DIR env, `agentgate web --data-dir`, or `data_dir` in agentgate.json (mode B: edit the compose mount) |
+| Host mount directory (mode A deploy scripts) | /opt/agentgate-platform/data | deploy_all.py / deploy_platform.py --data-dir <path>, or env AGENTGATE_DEPLOY_DATA_DIR; import_banks.py --data-dir (the in-container path is auto-detected; override with --container-data-dir) |
+
+The data directory is fixed **at deploy time** — the running platform binds it on
+startup, so it is not editable in the web UI; owner-only settings show the actual path
+read-only. After changing the host directory, re-run the deploy; old data is not
+migrated automatically (stop the container, copy, restart with the new --data-dir).
+
+
 ## 7. Offline deployment (server without internet)
 
 Build images on an internet-connected machine (**same CPU architecture** as the server),

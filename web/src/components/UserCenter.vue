@@ -298,6 +298,9 @@ async function saveSettings() {
         <div class="form-row"><label>{{ $t("admin.registration") }}</label>
           <Sel v-model="settings.registration_open" :options="regOptions" /></div>
       </div>
+      <div class="form-row"><label>{{ $t("admin.dataDir") }}</label>
+        <span class="mono muted">{{ settings.data_dir }}</span>
+        <span class="muted" style="font-size: 12px">{{ $t("admin.dataDirHint") }}</span></div>
       <div class="muted">{{ $t("admin.ports", { r: settings.receiver_port, p: settings.proxy_port }) }}</div>
       <button class="btn primary" style="margin-top: 8px" @click="saveSettings">{{ $t("common.save") }}</button>
     </div>

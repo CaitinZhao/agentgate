@@ -1,4 +1,8 @@
-<div align="right">English（this page） | [简体中文](../zh/public-banks.md)</div>
+<div align="right">
+
+English（this page） | [简体中文](../zh/public-banks.md)
+
+</div>
 
 # Open-source banks: download & regenerate
 

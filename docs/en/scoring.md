@@ -1,4 +1,8 @@
-<div align="right">English（this page） | [简体中文](../zh/scoring.md)</div>
+<div align="right">
+
+English（this page） | [简体中文](../zh/scoring.md)
+
+</div>
 
 # Scoring: three-layer judging + gold v2 + six dimensions
 

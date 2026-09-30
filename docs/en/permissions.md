@@ -1,4 +1,8 @@
-<div align="right">English（this page） | [简体中文](../zh/permissions.md)</div>
+<div align="right">
+
+English（this page） | [简体中文](../zh/permissions.md)
+
+</div>
 
 # Permissions: four roles and "my way of running"
 

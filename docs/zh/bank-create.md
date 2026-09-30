@@ -1,4 +1,8 @@
-<div align="right">[English](../en/bank-create.md) | 简体中文（本页）</div>
+<div align="right">
+
+[English](../en/bank-create.md) | 简体中文（本页）
+
+</div>
 
 # 新建题库：私有/公共、批量导入与开源改编
 

@@ -1,4 +1,8 @@
-<div align="right">[English](../en/deployment.md) | 简体中文（本页）</div>
+<div align="right">
+
+[English](../en/deployment.md) | 简体中文（本页）
+
+</div>
 
 # 环境准备与一键部署
 

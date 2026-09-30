@@ -1,4 +1,8 @@
-<div align="right">[English](../en/scoring.md) | 简体中文（本页）</div>
+<div align="right">
+
+[English](../en/scoring.md) | 简体中文（本页）
+
+</div>
 
 # 评分规则：三层判定 + gold v2 + 六维计分
 

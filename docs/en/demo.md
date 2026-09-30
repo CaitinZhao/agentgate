@@ -1,4 +1,8 @@
-<div align="right">English（this page） | [简体中文](../zh/demo.md)</div>
+<div align="right">
+
+English（this page） | [简体中文](../zh/demo.md)
+
+</div>
 
 # Demo: from zero -> create a bank -> launch a run -> read the diagnostic report
 
@@ -60,6 +64,9 @@ Task name, agent URL (`http://jiuwen-agent:8200` in compose), select the bank:
 
 ![Launch](../images/06-run-create.png)
 
+- **Test connection (contract probe)**: after entering the target URL, click it first — the
+  platform performs a real `/invoke` and validates the response contract item by item; fix any
+  ✗ before launching instead of burning a run.
 - **Message-level recording** is on by default (trajectory analysis / cost dimension depend
   on it). **✨ AI-assisted judging** is on by default (needs your User-Center AI config):
   judge suggestions for PENDING cases, root causes for failures, AI report summary.

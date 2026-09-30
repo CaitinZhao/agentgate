@@ -1,4 +1,8 @@
-<div align="right">English（this page） | [简体中文](../zh/architecture.md)</div>
+<div align="right">
+
+English（this page） | [简体中文](../zh/architecture.md)
+
+</div>
 
 # Architecture & Repository Layout
 

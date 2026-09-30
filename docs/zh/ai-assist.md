@@ -1,4 +1,8 @@
-<div align="right">[English](../en/ai-assist.md) | 简体中文（本页）</div>
+<div align="right">
+
+[English](../en/ai-assist.md) | 简体中文（本页）
+
+</div>
 
 # AI 辅助：平台自己的 LLM 用在哪、怎么配、边界在哪
 

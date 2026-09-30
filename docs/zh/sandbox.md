@@ -1,4 +1,8 @@
-<div align="right">[English](../en/sandbox.md) | 简体中文（本页）</div>
+<div align="right">
+
+[English](../en/sandbox.md) | 简体中文（本页）
+
+</div>
 
 # 沙箱执行：被测 Agent 的运行形态与隔离边界
 

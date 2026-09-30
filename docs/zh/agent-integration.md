@@ -1,4 +1,8 @@
-<div align="right">[English](../en/agent-integration.md) | 简体中文（本页）</div>
+<div align="right">
+
+[English](../en/agent-integration.md) | 简体中文（本页）
+
+</div>
 
 # Agent 接入：让平台评测你的 Agent
 
@@ -112,7 +116,7 @@ agentgate probe http://127.0.0.1:8220
 ```
 
 **② 操作员在环（人/LLM 会话作答）**：`tools/agent_relay.py` 把任何交互式答手
-（人、ZCode、一个 LLM 会话）变成被测 Agent——invoke 到来时把题面落盘等待，操作员
+（人、编码智能体、一个 LLM 会话）变成被测 Agent——invoke 到来时把题面落盘等待，操作员
 写入答案文件后原样回传：
 
 ```bash

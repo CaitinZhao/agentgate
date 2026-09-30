@@ -1,4 +1,8 @@
-<div align="right">English（this page） | [简体中文](../zh/bank-create.md)</div>
+<div align="right">
+
+English（this page） | [简体中文](../zh/bank-create.md)
+
+</div>
 
 # Create a Bank
 

@@ -1,4 +1,8 @@
-<div align="right">[English](../en/developing.md) | 简体中文（本页）</div>
+<div align="right">
+
+[English](../en/developing.md) | 简体中文（本页）
+
+</div>
 
 # 测试指南（开发者）
 

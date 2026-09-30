@@ -1,11 +1,15 @@
-<div align="right">English（this page） | [简体中文](README.md)</div>
+<div align="right">
 
-# AgentGate · Enterprise Agent Evaluation Platform
+English（this page） | [简体中文](README.md)
 
-AgentGate is a web-based evaluation platform for enterprise agents: organize the questions
-you care about into **case banks**, launch **evaluation runs** against the agent under test,
-and get automatic **verdicts, trajectory analysis, six-dimension scores and diagnostic
-reports** as the evidence for release decisions.
+</div>
+
+# AgentGate
+
+AgentGate is an **open-source evaluation harness for enterprise agents**: organize the
+questions you care about into **case banks**, launch **evaluation runs** against the agent
+under test, and get automatic **verdicts, trajectory analysis, six-dimension scores and
+diagnostic reports** as the evidence for release decisions.
 
 ![Banks](docs/images/02-banks.png)
 
@@ -58,6 +62,7 @@ offline deployment in [Deployment](docs/en/deployment.md).
 | [Create a bank](docs/en/bank-create.md) | Private/public wizard, open-benchmark adaptation, AI drafting |
 | [Edit a bank](docs/en/bank-edit.md) | Every authoring field explained with examples |
 | [Agent integration](docs/en/agent-integration.md) | /invoke contract, trace export, recording, capability handshake |
+| [Hands-on walkthrough](docs/en/walkthrough.md) | Zero-to-platform: start, build a bank, hook up a code agent / the example agent, trace reporting, two contrast runs |
 | [Open-source banks](docs/en/public-banks.md) | FinanceBench / LoCoMo / LongMemEval / τ-bench download & regeneration |
 | [Permissions](docs/en/permissions.md) | Four roles, per-user overrides on public banks |
 | [Testing guide](docs/en/developing.md) | Developer view: unit / offline smoke / web tests / fixtures |

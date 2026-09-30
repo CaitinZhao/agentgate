@@ -1,4 +1,8 @@
-<div align="right">[English](../en/bank-edit.md) | 简体中文（本页）</div>
+<div align="right">
+
+[English](../en/bank-edit.md) | 简体中文（本页）
+
+</div>
 
 # 修改题库与出题字段：每个字段的含义与例子
 

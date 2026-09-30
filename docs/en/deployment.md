@@ -1,3 +1,9 @@
+<div align="right">
+
+[简体中文](../zh/deployment.md) | English（this page）
+
+</div>
+
 # Deployment Guide (from zero)
 
 > Assumes you have **never touched this repo and the machines are empty**. Two deployment

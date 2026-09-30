@@ -1,4 +1,8 @@
-<div align="right">[English](../en/diagnostic-report.md) | 简体中文（本页）</div>
+<div align="right">
+
+[English](../en/diagnostic-report.md) | 简体中文（本页）
+
+</div>
 
 # 诊断报告：一次 run 产出什么、怎么读
 

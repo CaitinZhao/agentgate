@@ -1,4 +1,8 @@
-<div align="right">[English](../en/permissions.md) | 简体中文（本页）</div>
+<div align="right">
+
+[English](../en/permissions.md) | 简体中文（本页）
+
+</div>
 
 # 权限管理：四级角色与"我的跑法"
 

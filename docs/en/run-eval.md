@@ -1,4 +1,8 @@
-<div align="right">English（this page） | [简体中文](../zh/run-eval.md)</div>
+<div align="right">
+
+English（this page） | [简体中文](../zh/run-eval.md)
+
+</div>
 
 # Runs & Archiving
 
@@ -8,6 +12,7 @@ Launch (Runs -> Launch):
 |---|---|
 | task name | business name (timestamp suffix makes it unique; searchable) |
 | agent URL | the /invoke base URL (sample agent: `http://jiuwen-agent:8200` in compose) |
+| Connection probe | After entering the target, click **测试连接（合约自检） / Test connection**: the platform performs a real `/invoke` round-trip and validates the response contract field by field (✗ = would break or misjudge, ! = a dimension degrades); also available as `agentgate probe <URL>` |
 | banks & levels | any visible banks; level filter stacks on top of personal overrides |
 | case_ids | optional exact cases — sample before full runs |
 | message-level recording | on by default: LLM traffic via the recording proxy (trajectory/cost depend on it) |

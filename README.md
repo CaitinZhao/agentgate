@@ -1,10 +1,14 @@
-<div align="right">English | 简体中文（本页）</div>
+<div align="right">
 
-# AgentGate · 企业 Agent 评测平台
+[English](README-en.md) | 简体中文（本页）
 
-AgentGate 是一个带 Web 界面的企业 Agent 评测平台：把要考察的问题整理成**题库**，
-对着被测 Agent **发起评测**，平台自动**判定对错、分析轨迹、给出六维评分和诊断报告**，
-作为 Agent 版本能否上线的依据。
+</div>
+
+# AgentGate
+
+AgentGate 是一个**开源的企业 Agent 评测 harness**（open-source evaluation harness for
+enterprise agents）：把要考察的问题整理成**题库**，对着被测 Agent **发起评测**，自动
+**判定对错、分析轨迹、给出六维评分和诊断报告**，作为 Agent 版本能否上线的依据。
 
 ![题库列表](docs/images/02-banks.png)
 
@@ -45,6 +49,7 @@ docker compose --profile agent up -d --build               # 可选：样例被�
 
 | 文档 | 内容 |
 |---|---|
+| [实战演练（零基础）](docs/zh/walkthrough.md) | 从零启动平台 → 建题库 → 接入编码智能体/示例 Agent → 轨迹上报 → 两轮对照评测（全程截图） |
 | [demo 演示](docs/zh/demo.md) | 用样例 Agent 完整走一遍：建库 → 发起评测 → 看报告（全程截图） |
 | [环境准备与一键部署](docs/zh/deployment.md) | 零基础装 Docker、两种部署方式、端口配置、离线部署、常见问题 |
 | [架构设计与目录结构](docs/zh/architecture.md) | 设计原则总览 + 子文档索引 + 仓库目录说明 |

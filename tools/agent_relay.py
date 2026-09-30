@@ -1,5 +1,5 @@
 """Operator-in-the-loop relay: turn ANY interactive answerer (a human, an LLM chat
-session, ZCode) into an AgentGate target agent — no OTel, no SDK, no code changes
+session, a code agent) into an AgentGate target agent — no OTel, no SDK, no code changes
 on the platform side.
 
 Setup:

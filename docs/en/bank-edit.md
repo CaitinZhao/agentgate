@@ -1,4 +1,8 @@
-<div align="right">English（this page） | [简体中文](../zh/bank-edit.md)</div>
+<div align="right">
+
+English（this page） | [简体中文](../zh/bank-edit.md)
+
+</div>
 
 # Edit a Bank: every authoring field explained
 

@@ -1,4 +1,8 @@
-<div align="right">English（this page） | [简体中文](../zh/diagnostic-report.md)</div>
+<div align="right">
+
+English（this page） | [简体中文](../zh/diagnostic-report.md)
+
+</div>
 
 # Diagnostic Report: what one run produces and how to read it
 

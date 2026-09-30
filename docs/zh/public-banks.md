@@ -1,4 +1,8 @@
-<div align="right">[English](../en/public-banks.md) | 简体中文（本页）</div>
+<div align="right">
+
+[English](../en/public-banks.md) | 简体中文（本页）
+
+</div>
 
 # 开源题库下载使用
 

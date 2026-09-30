@@ -1,4 +1,8 @@
-<div align="right">English（this page） | [简体中文](../zh/sandbox.md)</div>
+<div align="right">
+
+English（this page） | [简体中文](../zh/sandbox.md)
+
+</div>
 
 # Sandbox Execution: where the agent runs, and the isolation boundary
 

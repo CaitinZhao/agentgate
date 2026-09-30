@@ -1,4 +1,8 @@
-<div align="right">[English](../en/architecture.md) | 简体中文（本页）</div>
+<div align="right">
+
+[English](../en/architecture.md) | 简体中文（本页）
+
+</div>
 
 # 架构设计与目录结构
 

@@ -1,4 +1,8 @@
-<div align="right">English（this page） | [简体中文](../zh/ai-assist.md)</div>
+<div align="right">
+
+English（this page） | [简体中文](../zh/ai-assist.md)
+
+</div>
 
 # AI Assist: what the platform's own LLM does, config, boundaries
 

@@ -1,8 +1,12 @@
-<div align="right">[English](../en/trace-recording.md) | 简体中文（本页）</div>
+<div align="right">
+
+[English](../en/trace-recording.md) | 简体中文（本页）
+
+</div>
 
 # 轨迹录制：Agent OTLP 上报 + 消息级录制代理
 
-本文档解释评测时平台从两条通道收集轨迹的原因、各自的分工，以及被测 Agent 两侧需要做什么配置。
+本文档解释评测时平台从两条上报通道收集轨迹的原因、各自的分工，以及被测 Agent 两侧需要做什么配置；Agent 完全不上报时还有响应内 `audit` 自报作最小兜底（见下）。
 接入层面的完整步骤（含样例代码）见 [Agent 接入](agent-integration.md)。
 
 ## 两条通道，各看一半事实
@@ -19,6 +23,11 @@
 - **② 独有**：注入跟随与金丝雀泄露检测、跳步直答（有消息流但零工具调用）、精确 token 成本、
   检查点的参数级命中。
 - **重叠**：工具调用序列（开录制后优先用 ②，粒度到参数）。
+
+> **最小兜底（③）**：Agent 两条通道都没有时，invoke 响应里的 `audit` 数组
+> （自报工具序列）会被用作工具轨迹，支撑工具类 checkpoint 与红线扫描；
+> `usage_total` 也会兜底成本维。OTel 仍是权威来源，两者不重复计。
+> 字段格式见 [Agent 接入](agent-integration.md)。
 
 ## 发起评测时的通道开关
 

@@ -18,7 +18,7 @@ Four enhancements:
 | Failure root causes | per-failed-case root_cause + fix, in the report AI section | same |
 | Judge suggestions | PENDING free_text cases scored against the rubric: PASS/FAIL/PARTIAL + confidence + rationale | display-only; auto-adopt only when enabled AND confidence=high (recorded in judge.jsonl) |
 | Drafting | case-gold drafting in the case form; domain-pack drafting in the bank editor | drafts require human review; saving a pack signs it llm-draft+human-reviewed |
-| Post-hoc AI judging (single/batch) | runs that finished before AI was configured leave PENDING cases stuck — "✨ AI judge" per case and "✨ Batch AI judge" drain them all (with per-point rubric coverage); suggestions feed the human final ruling. The "✨ AI-assisted judging" toggle at launch controls whether a run generates suggestions/root-causes/summary automatically |
+| Post-hoc AI judging (single/batch) | runs that finished before AI was configured leave PENDING cases stuck — "✨ AI judge" per case and "✨ Batch AI judge" drains them all as a background job (enqueue + polled progress, stoppable, with per-point rubric coverage); suggestions feed the human final ruling. The "✨ AI-assisted judging" toggle at launch controls whether a run generates suggestions/root-causes/summary automatically |
 | Dispute → AI gold revision | "✨ AI fix gold" on FAIL rows in the run detail: reviews query + current gold + the agent's actual answer + judging rationale, and drafts a revised gold — first distinguishing "agent is wrong (keep gold)" from "gold is unreasonable (propose fix)" | draft is editable; applying goes through the normal case PATCH and takes effect on the next re-run |
 
 ## Every AI prompt is visible and editable

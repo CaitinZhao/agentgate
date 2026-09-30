@@ -109,24 +109,45 @@ async function aiJudge(it: any) {
 const batchBusy = ref(false);
 const batchDone = ref(0);
 const batchTotal = ref(0);
+// batch AI judging is an ASYNC job: enqueue once, then poll progress; a page
+// refresh re-attaches via the latest-job endpoint, and cancel stops between cases
+let pollTimer: any = null;
 async function batchJudge() {
-  batchBusy.value = true;
   err.value = "";
+  batchBusy.value = true;
   batchDone.value = 0;
   batchTotal.value = (run.value?.items || []).filter((i: any) => i.verdict === "PENDING").length;
   try {
-    for (let guard = 0; guard < 200; guard++) {
-      const r = await api("POST", `/runs/${id}/ai-judge-batch`, { limit: 10 });
-      batchDone.value += (r.judged || []).length;
-      if ((r.failed || []).length && !(r.judged || []).length) {
-        err.value = r.failed[0].error; break;
-      }
-      if (!r.remaining) break;
+    const r = await api("POST", `/runs/${id}/ai-judge-batch`, { limit: 30 });
+    if (!r.job_id) { batchBusy.value = false; return; }   // nothing to judge
+    await pollBatchJob();
+  } catch (e: any) { err.value = e.message; batchBusy.value = false; }
+}
+
+async function pollBatchJob() {
+  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+  try {
+    const st = await api("GET", `/runs/${id}/ai-judge-jobs/latest`);
+    if (st.status === "none") { batchBusy.value = false; return; }
+    batchDone.value = st.done;
+    batchTotal.value = st.total;
+    if (st.status === "running") {
+      pollTimer = setTimeout(pollBatchJob, 2500);
+      return;
     }
-    msgOk.value = t("runDetail.batchJudgeDone", { n: batchDone.value });
+    // done / cancelled / failed-batch: show what we have and refresh suggestions
+    if (st.failed?.length) err.value = st.failed[0].error;
+    else msgOk.value = t("runDetail.batchJudgeDone", { n: st.judged?.length ?? batchDone.value });
     await load();
   } catch (e: any) { err.value = e.message; }
   batchBusy.value = false;
+}
+
+async function cancelBatchJudge() {
+  try {
+    const st = await api("GET", `/runs/${id}/ai-judge-jobs/latest`);
+    if (st.id) await api("POST", `/ai-judge-jobs/${st.id}/cancel`);
+  } catch (e: any) { err.value = e.message; }
 }
 
 async function review(it: any, verdict: "PASS" | "FAIL") {
@@ -326,6 +347,8 @@ function dl(fname: string) {
       <button v-if="done && (run.items || []).some(i => i.verdict === 'PENDING')" class="btn small"
               :disabled="batchBusy" @click="batchJudge">
         ✨ {{ $t("runDetail.batchJudge") }}{{ batchBusy ? ` (${batchDone}/${batchTotal})` : "" }}</button>
+      <button v-if="batchBusy" class="btn small danger" @click="cancelBatchJudge">
+        {{ $t("runDetail.batchJudgeCancel") }}</button>
     </div>
 
     <div class="tbl-wrap">

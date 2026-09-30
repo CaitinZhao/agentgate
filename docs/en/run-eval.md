@@ -34,7 +34,7 @@ shows PENDING(n)), SKIPPED (environment unmet). A run whose target is unreachabl
 PENDING handling (all inside the items tab, evidence and ruling on one screen): click
 "✧ Arbitrate" to open the case detail dialog (question, full answer, gold, tool sequence,
 per-check details); "✨ AI judge" gets a suggestion with per-point rubric coverage, or
-"✨ Batch AI judge" drains every PENDING case; the human final ruling records reviewer +
+"✨ Batch AI judge" drains every PENDING case as a background job (enqueue + polled progress, stoppable); the human final ruling records reviewer +
 note — **when the last PENDING is ruled**, the total and final gate are recomputed and the
 report can be refreshed with "↻ Rebuild report". The "high-confidence auto-adopt" switch
 (User Center -> AI) auto-applies confidence=high suggestions during the run (judge.jsonl).

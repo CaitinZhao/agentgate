@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel
 
 from .. import auth, banks, db
+from .. import ai_judge_jobs
 from ..worker import VALID_LEVELS, resolve_run_cases
 
 router = APIRouter(prefix="/api/v1", tags=["runs"])
@@ -537,34 +538,53 @@ def ai_judge_case(run_id: str, case_id: str, user: dict = Depends(auth.require_m
 
 
 class BatchJudgeBody(BaseModel):
-    limit: int = 10                             # cases per call (frontend loops until done)
+    limit: int = 30                             # max PENDING cases per job (snapshot)
 
 
 @router.post("/runs/{run_id}/ai-judge-batch")
 def ai_judge_batch(run_id: str, body: BatchJudgeBody,
                    user: dict = Depends(auth.require_min("member"))):
-    """Batch post-hoc AI judging: judges up to `limit` PENDING cases per call (suggestions
-    appended to judge.jsonl and picked up by the run detail); the frontend loops until
-    `remaining` hits 0. Human final ruling still decides every verdict."""
+    """Batch post-hoc AI judging, ASYNC: validates and enqueues a background job that
+    judges a snapshot of PENDING case ids (suggestions appended to judge.jsonl); the
+    frontend polls GET /runs/{run_id}/ai-judge-jobs/latest until status=done. Human
+    final ruling still decides every verdict."""
     run = _get_own_or_admin_run(run_id, user)
     if run["status"] != "succeeded":
         raise HTTPException(400, "run not finished: %s" % run["status"])
     cfg = db.ai_config_for(user["id"])
     if not cfg:
         raise HTTPException(400, "AI not configured: set base_url/api_key/model in User Center")
-    judged, failed = [], []
-    limit = max(1, min(int(body.limit or 10), 30))
+    latest = ai_judge_jobs.latest_for_run(run_id)
+    if latest and latest["status"] == "running":
+        return {"job_id": latest["id"], "queued": latest["total"] - latest["done"],
+                "remaining": latest["remaining"], "already_running": True}
+    limit = max(1, min(int(body.limit or 30), 100))
     pending = [i["case_id"] for i in db.list_run_items(run_id) if i["verdict"] == "PENDING"]
     todo = pending[:limit]
-    for case_id in todo:
-        try:
-            sug = _ai_judge_one(run, case_id, cfg, user)
-            judged.append({"case_id": case_id, "verdict_suggest": sug["verdict_suggest"],
-                           "covered": sug.get("covered"),
-                           "rubric_total": len(sug.get("coverage") or [])})
-        except HTTPException as e:
-            failed.append({"case_id": case_id, "error": e.detail})
-    return {"judged": judged, "failed": failed, "remaining": max(len(pending) - len(todo), 0)}
+    if not todo:
+        return {"job_id": None, "queued": 0, "remaining": 0, "already_running": False}
+
+    def judge_fn(case_id: str) -> Dict:
+        return _ai_judge_one(run, case_id, cfg, user)
+
+    job_id = ai_judge_jobs.enqueue(run_id, todo, judge_fn)
+    return {"job_id": job_id, "queued": len(todo),
+            "remaining": max(len(pending) - len(todo), 0), "already_running": False}
+
+
+@router.get("/runs/{run_id}/ai-judge-jobs/latest")
+def ai_judge_batch_latest(run_id: str, user: dict = Depends(auth.require_min("member"))):
+    """Poll target for the async batch: progress of the run's latest job (or none)."""
+    _get_own_or_admin_run(run_id, user)
+    st = ai_judge_jobs.latest_for_run(run_id)
+    return st or {"status": "none", "done": 0, "total": 0, "judged": [], "failed": [],
+                  "remaining": 0}
+
+
+@router.post("/ai-judge-jobs/{job_id}/cancel")
+def ai_judge_batch_cancel(job_id: str, user: dict = Depends(auth.require_min("member"))):
+    """Stop a running batch between cases (already-judged suggestions stay)."""
+    return {"ok": ai_judge_jobs.cancel(job_id)}
 
 
 @router.post("/runs/{run_id}/review")

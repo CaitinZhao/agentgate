@@ -88,7 +88,7 @@ A real run of the 10 cases (4 pass, 5 fail, 1 pending; total 68.9):
 - Per-case rows give a one-line human summary; click the case id for the **detail dialog** —
   question, full agent answer, gold, tool-call sequence, per-check ✓/✗ details. FAIL rows
   offer "✨ AI fix gold"; PENDING rows open the same dialog with the arbitration panel
-  ("✨ AI judge" per case, "✨ Batch AI judge" for all).
+  ("✨ AI judge" per case, "✨ Batch AI judge" for all — batch runs as a background job with polled progress).
 - The **Report tab** renders the bilingual statistics report — **AI summary first**, then
   failure-attribution distribution, six-dimension overview, native reading, token summary
   (per-case details live in the items tab, not in the report):

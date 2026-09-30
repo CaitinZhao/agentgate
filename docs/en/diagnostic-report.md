@@ -12,7 +12,7 @@ radar (n/a for missing data; "safety-capped" badge when safety < 60); **native r
 per-dimension diagnostic cards (penalty signals / worst samples / improvements); per-case
 rows with a one-line human summary — click the case id for the **detail dialog** (question,
 full agent answer, gold, tool sequence, per-check ✓/✗ details; PENDING cases arbitrate right
-there, with "✨ AI judge" and "✨ Batch AI judge"); Report tab (bilingual statistics report —
+there, with "✨ AI judge" and "✨ Batch AI judge" (batch = background job, polled progress); Report tab (bilingual statistics report —
 AI summary first, failure-attribution distribution, six-dimension overview, native reading,
 token summary); Trajectory tab (plain-language behavior bullets per case); Artifacts tab
 (downloads).

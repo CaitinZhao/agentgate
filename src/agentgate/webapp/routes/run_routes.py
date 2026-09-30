@@ -744,7 +744,38 @@ def _rebuild_base_reports(run: dict, out_dir: Path) -> dict:
         runs_meta = json.loads((out_dir / "runs_meta.json").read_text(encoding="utf-8"))
         from ...result.gates import evaluate_gate
         from ...result.report import build_report
+        # eval_results.json is archived before review; fold in the human final rulings
+        # recorded on the run items so the report reflects the post-review state
+        ruled = {i["case_id"]: i["final_verdict"]
+                 for i in db.list_run_items(run["id"]) if i.get("final_verdict")}
+        if ruled:
+            for r in results:
+                fv = ruled.get(r.get("task_id"))
+                if fv and r["scores"].get("human_review") == "pending":
+                    r["scores"]["human_review"] = "pass" if fv == "PASS" else "fail"
         gate = evaluate_gate(results)
+
+        def _state(r):
+            # human ruling wins, then the deterministic/rule gate, else awaiting review
+            hv = r["scores"].get("human_review")
+            if hv in ("pass", "fail"):
+                return hv
+            if r["task_id"] in gate["failures"]:
+                return "fail"
+            return "pending" if hv == "pending" else "pass"
+
+        resolved_fails = [r["task_id"] for r in results if _state(r) == "fail"]
+        resolved_pends = [r["task_id"] for r in results if _state(r) == "pending"]
+        if resolved_fails:
+            decision = "FAIL"
+        elif resolved_pends:
+            decision = "PENDING(%d)" % len(resolved_pends)
+        else:
+            decision = "GREEN"
+        gate = dict(gate, decision=decision, failures=resolved_fails,
+                    score=("%d/%d" % (len(results) - len(resolved_pends) - len(resolved_fails),
+                                      len(results) - len(resolved_pends))
+                           if (len(results) - len(resolved_pends)) > 0 else "n/a"))
         byl, bys = {}, {}
         for m in runs_meta:
             byl.setdefault(m.get("level", "-"), []).append(m["task_id"])
@@ -755,9 +786,8 @@ def _rebuild_base_reports(run: dict, out_dir: Path) -> dict:
             for k, tids in sorted(groups.items()):
                 tset = set(tids)
                 res = [r for r in results if r["task_id"] in tset]
-                pend = sum(1 for r in res if r["scores"].get("human_review") == "pending"
-                           and r["task_id"] not in gate["failures"])
-                fail = sum(1 for r in res if r["task_id"] in gate["failures"])
+                fail = sum(1 for r in res if _state(r) == "fail")
+                pend = sum(1 for r in res if _state(r) == "pending")
                 rows.append({"suite": k, "level": k, "total": len(res),
                              "pass": len(res) - fail - pend, "fail": fail, "pending": pend})
             return rows

@@ -237,6 +237,12 @@ def rescore_after_review(scores: Dict, reviews: List[Dict]) -> Dict:
             if c["scores"].get("success") is not None]
     rs = scores.setdefault("run_scores", {})
     rs["success"] = round(sum(succ) / len(succ), 1) if succ else None
+    # keep the verdict counts in sync with the folded rulings
+    verd = [c.get("verdict") for c in scores.get("per_case", [])]
+    if scores.get("counts") is not None:
+        scores["counts"] = {"pass": verd.count("PASS"), "fail": verd.count("FAIL"),
+                            "pending": verd.count("PENDING"), "skipped": verd.count("SKIPPED"),
+                            "total": len(verd)}
     total = total_score(rs)
     scores["total"], scores["capped_by_safety"] = total["total"], total["capped_by_safety"]
     scores["final_gate"] = ("GREEN" if all(c["verdict"] == "PASS"

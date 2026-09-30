@@ -85,6 +85,53 @@ agent container (environment + conditions).
 Capability handshake: banks declare their required profile via the domain pack; agents that
 do not declare it get those cases SKIPPED (never mis-judged).
 
+## Bringing in a new open-source benchmark
+
+Two paths, chosen by dataset shape and judging needs:
+
+**Path A: UI/CLI auto-adaptation (simple QA datasets, zero code)**. If the dataset is a
+jsonl/csv list of question/answer pairs: use "外部数据集" on the bank page or
+`agentgate autoadapt --source <path>` — automatic bucketing, case generation and a
+human-review checklist you confirm item by item. Fits exam-style datasets (FinEval);
+walk path B when you need custom judging logic or an environment.
+
+**Path B: full integration (custom judging / environment / official metric)**. Using a
+hypothetical `mybench`, six steps, each a real file:
+
+1. **Write the adapter** `src/agentgate/case/public_benchmarks/mybench_adapter.py`:
+   provide `build(...) -> Dict` that locates/downloads the dataset, maps each item to a
+   platform case and writes `cases/mybench/cases.jsonl`. Cases follow gold v2:
+   `case_id / type / level / input.query (optional context)`, `gold.final + checkpoints
+   + rubric`, and `source` (seed & provenance required — they carry reproducibility and
+   contamination control). Simplest reference: `gaia_adapter.py`; for argument-level
+   official scoring see `bfcl_adapter.py`.
+2. **Register the build entry** `src/agentgate/case/build_banks.py`: add a `--mybench`
+   flag and branch (dataset-path parameters follow `--locomo-data`).
+3. **Domain pack** `src/agentgate/case/packs/mybench.json`: profile requirement, red
+   lines, judge hints and per-type defaults; template in `gaia.json`. The bank
+   requirements carry `{"profile": "...", "pack": "mybench"}`; at handshake an agent
+   missing the profile gets the bank SKIPPED (never mis-judged as failed).
+4. **Native reading (when an official metric exists)**: add entries to `FAMILIES` /
+   `FAMILY_LABELS` in `src/agentgate/analysis/native_scoring.py`, implement
+   `score_mybench(case, response, trace, pack) -> Dict` and add one branch to
+   `compute_native` — the judge then uses it as the typed check (single source of
+   truth) and reports/compare gain a native-score row automatically. Unit tests go in
+   `tests/test_native_scoring.py`.
+5. **Environment profile (when cases need one)**: register the profile and tools in the
+   sample agent (`tests/fixtures/jiuwen_server.py`); or set `"env_scope":
+   "judge-only"` when the assets serve judging only (like spider's SQLite).
+6. **Build & import**: generate cases.jsonl locally with
+   `python -m agentgate.case.build_banks --mybench`; add one row to the `BANKS` table
+   in `deploy/import_banks.py` (display / category / default level / requirements /
+   local cases.jsonl / assets dir), then on the deployed host
+   `python agentgate/deploy/import_banks.py --banks mybench` creates the bank, imports
+   the cases and ships the assets.
+
+**Post-integration checklist**: native-scorer unit tests green → sample 3-5 cases via
+`case_ids` to estimate cost → then the full run; record the sampling recipe and seed in
+the bank README; follow the contamination guard below (both readings stay
+observation-only).
+
 Contamination guard: open-benchmark scores (both readings) are for cross-agent observation
 and trends only — never a release-accept criterion. Provenance (dataset seed, adaptation
 notes) is kept on every case and visible in the bank detail page.

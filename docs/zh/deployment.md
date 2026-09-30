@@ -229,7 +229,11 @@ docker run -d --name agentgate-web --network host -v /opt/agentgate-platform/dat
 
 | 现象 | 原因 | 处理 |
 |---|---|---|
-| 浏览器打不开 8030 | 安全组没放行 / 容器没起 / 端口改过 | 放行端口；`docker ps` + `docker logs agentgate-web`；确认实际端口 |
+
+| Agent 容器 Exited(1)，日志 `from profile_prompts import ... ModuleNotFoundError` | `deploy_eval.py` 内嵌的 JIUWEN_DOCKERFILE 与仓库 `Dockerfile.agent` 不同步，新 fixture 文件漏 COPY | 两处 Dockerfile 都要补 `COPY agentgate/tests/fixtures/profile_prompts.py /app/profile_prompts.py`，重跑 Agent 部署 |
+| agentdojo 抽样全 PENDING，answers.jsonl 是 `agentdojo environment error: No module named 'agentdojo'` | Agent 容器没装 agentdojo 包（`/capabilities` 列表是硬编码的，握手照常通过——能力声明≠依赖已装） | `deploy_eval.py` 的 JIUWEN_REQUIREMENTS 加 `agentdojo==0.1.35` 重建镜像；验证要看 invoke 实跑，不能只看握手 |
+| `import_banks.py` 的 db-import 失败，traceback 被截断 | docker exec 只能看到卷内路径：脚本把宿主机 `/opt/agentgate-platform/data` 和宿主 `/tmp` 当容器路径用 | staging 放卷内（宿主 `/opt/.../data/tmp-import/<库>` ↔ 容器 `/app/data/tmp-import/<库>`），`--db` 用容器路径 `/app/data/banks/public/<库>/cases.db`；手动跑一次不截断 stderr 定位 |
+| SFTP 上传 124MB 包中途 `Server connection dropped` | 跨网长传输抖动 | `for i in 1 2 3; do python deploy_eval.py --skip-run && break; sleep 15; done`（脚本自身步骤也有 3 次重试） || 浏览器打不开 8030 | 安全组没放行 / 容器没起 / 端口改过 | 放行端口；`docker ps` + `docker logs agentgate-web`；确认实际端口 |
 | run 里题目全是 SKIPPED | 能力握手失败：库要求 profile=fb 而 Agent `/capabilities` 没声明 | `curl -s http://127.0.0.1:8200/capabilities` 对照题库 requirements |
 | 勾了消息级录制但成本维 n/a | proxy_upstream 未配 / Agent 不支持 llm_base_url | 设置页配 ②；`/capabilities` 里 `llm_base_url_supported` 应为 true |
 | fb 剖面题目检索结果为空 | PDF 语料没挂载（仓库不含语料） | 按 `deploy/fb_pdfs/README.md` 下载后重启 Agent 容器 |

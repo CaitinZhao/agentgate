@@ -227,7 +227,11 @@ Useful: `docker ps`, `docker compose logs -f agentgate`, `docker restart agentga
 
 | Symptom | Cause | Action |
 |---|---|---|
-| 8030 unreachable | security group / container down / port changed | open the port; `docker ps` + `docker logs agentgate-web`; confirm the actual port |
+
+| Agent container Exited(1), log shows `from profile_prompts import ... ModuleNotFoundError` | deploy_eval.py's embedded JIUWEN_DOCKERFILE drifted from the repo's Dockerfile.agent — the new fixture file was not COPYed | add `COPY agentgate/tests/fixtures/profile_prompts.py /app/profile_prompts.py` to BOTH Dockerfiles and redeploy the agent |
+| agentdojo sample run all PENDING, answers.jsonl says `agentdojo environment error: No module named 'agentdojo'` | the agent container lacks the agentdojo package (the /capabilities list is hardcoded, so the handshake still passes — a declared profile is not an installed dependency) | add `agentdojo==0.1.35` to JIUWEN_REQUIREMENTS in deploy_eval.py and rebuild; verify by an actual invoke, not the handshake |
+| import_banks.py db-import fails with a truncated traceback | docker exec only sees volume paths: the script used the host's /opt/agentgate-platform/data and host /tmp as container paths | stage under the volume (host /opt/.../data/tmp-import/<bank> = container /app/data/tmp-import/<bank>) and pass --db as the container path /app/data/banks/public/<bank>/cases.db; rerun the command manually once for an untruncated stderr |
+| the 124MB SFTP upload drops mid-transfer (`Server connection dropped`) | long-haul link flakiness | `for i in 1 2 3; do python deploy_eval.py --skip-run && break; sleep 15; done` (script stages retry 3 times internally too) || 8030 unreachable | security group / container down / port changed | open the port; `docker ps` + `docker logs agentgate-web`; confirm the actual port |
 | all cases SKIPPED | handshake: the bank requires a profile the agent does not declare | compare `/capabilities` with the bank requirements; rebuild the agent or edit the bank |
 | recording on but cost n/a | proxy_upstream unset, or the agent ignores llm_base_url | configure ② in Platform Settings; `/capabilities` should show `llm_base_url_supported: true` |
 | fb-profile cases return empty retrieval | PDF corpus not mounted | see `deploy/fb_pdfs/README.md`, then restart the agent container |

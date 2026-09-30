@@ -78,6 +78,46 @@ SKIPPED（公平握手）；`judge-only` = 环境资产只用于**判定**（如
 运行这些题库的环境要求见各库的领域包（题库详情页"领域包"卡）：如 `fb` 需要 Agent 声明
 `fb` 剖面并挂载财报语料；Agent 不支持时对应题目 SKIPPED，不会误判失败。
 
+## 接入一个新的开源题库
+
+分两条路，按数据集形态与判定要求选：
+
+**路径 A：界面/CLI 自动改编（简单问答类，零代码）**。数据集是 jsonl/csv 的
+"问题/答案"对即可走这条路：题库页"外部数据集"或 `agentgate autoadapt --source <path>`
+——自动分桶、生成题目与人工检查清单，你逐条确认后即可评测。适合 FinEval 这类
+考试型数据集；需要自定义判定逻辑或环境时走路径 B。
+
+**路径 B：完整接入（需要自定义判定/环境/官方口径）**。以接入一个假想的
+`mybench` 为例，六步，每步都是真实文件：
+
+1. **写适配器** `src/agentgate/case/public_benchmarks/mybench_adapter.py`：提供
+   `build(...) -> Dict`，负责定位/下载数据集 → 逐条映射为平台题目 → 写
+   `cases/mybench/cases.jsonl`。题目遵循 gold v2：`case_id / type / level /
+   input.query（及可选 context）`、`gold.final + checkpoints + rubric`、
+   `source`（seed 与 provenance 必填——复现与防污染都靠它）。最简参考实现：
+   `gaia_adapter.py`；官方评分含参数校验的参考：`bfcl_adapter.py`。
+2. **注册构建入口** `src/agentgate/case/build_banks.py`：加 `--mybench` 参数与分支
+   （数据集路径参数的写法见 `--locomo-data`）。
+3. **领域包** `src/agentgate/case/packs/mybench.json`：声明剖面要求、红线、
+   judge 提示与各题型默认，模板见 `gaia.json`。题库 requirements 写
+   `{"profile": "...", "pack": "mybench"}`；能力握手时 Agent 缺剖面 → 整库 SKIPPED
+   （不误判失败）。
+4. **原生口径（有官方指标时）**：`src/agentgate/analysis/native_scoring.py` 的
+   `FAMILIES` / `FAMILY_LABELS` 各加一条，实现
+   `score_mybench(case, response, trace, pack) -> Dict`，并在 `compute_native`
+   分发链加一个分支——judge 随即把它当作 typed check（单一事实来源），报告与
+   对比页自动多出"原生分"一行。自测写进 `tests/test_native_scoring.py`。
+5. **环境剖面（题目需要环境时）**：样例 Agent `tests/fixtures/jiuwen_server.py`
+   注册剖面与工具；资产只用于判定时改用 `"env_scope": "judge-only"`（如 spider
+   的 SQLite）。
+6. **建库与导入**：本地 `python -m agentgate.case.build_banks --mybench` 生成
+   cases.jsonl；在 `deploy/import_banks.py` 的 `BANKS` 表加一行（显示名/类别/
+   默认 level/requirements/本地 cases.jsonl/资产目录），部署机上
+   `python agentgate/deploy/import_banks.py --banks mybench` 即完成建库+灌题+资产。
+
+**接入后验证清单**：原生评分器单测全绿 → 用 `case_ids` 抽 3-5 题估成本跑小样本 →
+全量；抽样口径与 seed 记进题库 README；遵守下方防污染约定（两种口径都只做观测）。
+
 ## 防污染约定
 
 - 开源题库的得分（两种口径）只用于**跨 Agent / 跨版本观测对标与趋势**，不进入任何发布

@@ -67,6 +67,7 @@ RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple \\
 COPY agentgate/tests/fixtures/fin_runtime /app/fin_runtime
 COPY agentgate/tests/fixtures/data /app/data
 COPY agentgate/tests/fixtures/jiuwen_server.py /app/jiuwen_server.py
+COPY agentgate/tests/fixtures/profile_prompts.py /app/profile_prompts.py
 COPY agentgate/tests/fixtures/jiuwen_agent.py /app/tests/fixtures/jiuwen_agent.py
 COPY agentgate/tests/fixtures/tau_envs /app/tau_envs
 COPY agentgate/deploy/fb_pdfs /app/fb_data
@@ -88,6 +89,7 @@ opentelemetry-exporter-otlp>=1.20
 
 JIUWEN_REQUIREMENTS = """pypdf>=4.0
 openjiuwen==0.1.18
+agentdojo==0.1.35
 fastapi>=0.100
 uvicorn>=0.23
 httpx>=0.27

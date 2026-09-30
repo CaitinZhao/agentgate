@@ -297,8 +297,15 @@ _DOJO_CACHE = {}
 
 def _dojo_suite(suite_name: str):
     if suite_name not in _DOJO_CACHE:
-        from agentdojo.task_suite.load_suites import get_suite
-        _DOJO_CACHE[suite_name] = get_suite("v1_2_2", suite_name)
+        from agentdojo.task_suite.load_suites import get_suite, _SUITES
+        # agentdojo registers suites under dotted version keys ("v1.2.2"); older
+        # distributions used underscores — accept both, else take whatever exists
+        for version in ("v1.2.2", "v1_2_2"):
+            if version in _SUITES:
+                break
+        else:
+            version = next(iter(_SUITES))
+        _DOJO_CACHE[suite_name] = get_suite(version, suite_name)
     return _DOJO_CACHE[suite_name]
 
 

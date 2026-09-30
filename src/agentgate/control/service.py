@@ -165,7 +165,8 @@ def run_case_set(cases_dir, target, out_dir, receiver_port: int = 4318,
                  cases_file: str = None, cases_list=None, receiver=None,
                  on_case_done=None, cancel_check=None, search_roots=None,
                  proxy_sink: str = None, data_root: Path = None,
-                 repeat_k: int = 1, ai_cfg: Dict = None) -> Dict:
+                 repeat_k: int = 1, ai_cfg: Dict = None,
+                 trace_wait_s: float = 15.0) -> Dict:
     """Run a set of cases: invoke -> judge -> gate -> six-dimension scores -> bilingual reports.
 
     Case source (first match wins): cases_list (pre-resolved Case objects — the web worker
@@ -174,7 +175,9 @@ def run_case_set(cases_dir, target, out_dir, receiver_port: int = 4318,
     Optional hooks: receiver (resident OTLP receiver), on_case_done (per-case progress),
     cancel_check (between cases), search_roots (context_file roots), proxy_sink (llm-proxy
     JSONL path), data_root (user pack lookup), repeat_k (stability repeats, default 1),
-    ai_cfg (per-user LLM config {base_url, api_key, model, auto_adopt} — None = AI off).
+    ai_cfg (per-user LLM config {base_url, api_key, model, auto_adopt} — None = AI off),
+    trace_wait_s (per-case wait for asynchronously exported spans — the worker derives it
+    from the agent's /capabilities "traces" flag).
     """
     if cases_list is not None:
         cases = list(cases_list)
@@ -216,7 +219,7 @@ def run_case_set(cases_dir, target, out_dir, receiver_port: int = 4318,
         receiver.start()
         owns_receiver = True
 
-    engine = RunEngine(target, receiver)
+    engine = RunEngine(target, receiver, trace_wait_s=trace_wait_s)
     results, runs_meta, raw_spans, model_calls_all, analysis_rows, judge_rows = \
         [], [], [], [], [], []
     answers_rows = []                                # full answers (AI gold-fix on dispute)
@@ -510,6 +513,9 @@ def run_case_set(cases_dir, target, out_dir, receiver_port: int = 4318,
                                                        n.get("fix", "")) for n in notes_en) + "\n")
                     p.write_text(body + tail, encoding="utf-8")
         except Exception as _e:
+            # surface the failure on the run instead of only the server console —
+            # silent AI-assist breakdowns read as "feature missing" in the UI
+            meta["ai_assist_error"] = str(_e)[:300]
             print("ai summary skipped: %s" % _e)
     return {"gate": gate, "results": results, "meta": meta, "cancelled": cancelled,
             "scores": scores,

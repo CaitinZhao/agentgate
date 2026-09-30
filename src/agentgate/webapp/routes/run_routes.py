@@ -231,6 +231,19 @@ def _get_own_or_admin_run(run_id: str, user: dict) -> dict:
     return run
 
 
+class ProbeBody(BaseModel):
+    target_url: str
+
+
+@router.post("/probe-agent")
+def probe_agent_endpoint(body: ProbeBody, user: dict = Depends(auth.require_min("member"))):
+    """Pre-flight contract check for a target agent (the run-create page's connection
+    test): /health + /capabilities touches and one synthetic /invoke round-trip validated
+    against the invoke contract. Pure diagnostics — changes nothing on either side."""
+    from ...control.probe import probe_agent
+    return probe_agent(body.target_url)
+
+
 @router.post("/runs")
 def create_run(body: CreateRunBody, user: dict = Depends(auth.require_min("member"))):
     task_name = (body.task_name or "").strip()

@@ -64,6 +64,19 @@ async function submit() {
     submitted.value = true;
   } catch (e: any) { err.value = e.message; }
 }
+
+const probe = ref<any>(null);
+const probing = ref(false);
+async function runProbe() {
+  err.value = "";
+  probe.value = null;
+  if (!targetUrl.value.trim()) { err.value = t("runCreate.needTarget"); return; }
+  probing.value = true;
+  try {
+    probe.value = await api("POST", "/probe-agent", { target_url: targetUrl.value.trim() });
+  } catch (e: any) { err.value = e.message; }
+  probing.value = false;
+}
 </script>
 
 <template>
@@ -86,7 +99,21 @@ async function submit() {
       <div class="form-row"><label>{{ $t("runCreate.taskName") }}</label><input v-model="taskName" /></div>
       <div class="form-row"><label>{{ $t("runCreate.targetUrl") }}</label>
         <input v-model="targetUrl" class="mono" placeholder="http://127.0.0.1:8200" /></div>
-      <div class="muted" style="margin: -4px 0 8px">{{ $t("runCreate.agentHint") }}</div>
+      <div class="inline" style="margin: -4px 0 8px">
+        <div class="muted" style="flex: 1">{{ $t("runCreate.agentHint") }}</div>
+        <button class="btn small" :disabled="probing" @click="runProbe">
+          {{ probing ? $t("runCreate.probing") : $t("runCreate.probe") }}</button>
+      </div>
+      <div v-if="probe" class="card" style="margin: 0 0 10px; padding: 10px 14px">
+        <div :class="probe.ok ? 'ok-box' : 'error-box'" style="margin: 0 0 8px">
+          {{ $t("runCreate.probeResult", { ok: probe.ok ? "OK" : "FAIL" }) }}
+        </div>
+        <div v-for="c in probe.checks" :key="c.name" style="font-size: 12px; line-height: 1.7">
+          <b :style="{ color: c.status === 'pass' ? '#2a9d5c' : c.status === 'warn' ? '#b8860b' : '#c0392b' }">
+            {{ c.status === "pass" ? "✓" : c.status === "warn" ? "!" : "✗" }} {{ c.name }}</b>
+          <span class="muted"> — {{ c.detail }}</span>
+        </div>
+      </div>
       <label class="checkbar" style="margin: 4px 0">
         <input type="checkbox" v-model="proxy" /> {{ $t("runCreate.proxy") }}</label>
       <div class="muted" style="margin: -2px 0 8px; padding-left: 22px">{{ $t("runCreate.proxyHint") }}</div>

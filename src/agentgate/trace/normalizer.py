@@ -92,3 +92,69 @@ def normalize(spans: List[Dict]) -> NormalizedTrace:
         denied_tools=denied, usage_tokens=usage,
         source=str(root.get("source", "eval")),
     )
+
+
+_DENIED_STATUSES = ("denied", "blocked", "refused")
+
+
+def _audit_tool_name(entry) -> str:
+    """Accepted audit entry shapes: "name", {"tool": name}, {"name": name}."""
+    if isinstance(entry, str):
+        return entry.strip()
+    if isinstance(entry, dict):
+        for key in ("tool", "name", "tool_name"):
+            if entry.get(key):
+                return str(entry[key]).strip()
+    return ""
+
+
+def merge_response_audit(trace: NormalizedTrace, resp: Dict) -> NormalizedTrace:
+    """Fold the invoke response's self-reported audit entries into the normalized trace.
+
+    Lightweight trace reporting for external agents that do not export OTLP: per the
+    invoke contract they may return
+        "audit": [{"tool": "retrieve_report", "status": "ok", "summary": "..."},
+                  {"tool": "export_data", "status": "denied"}, "simple_tool_name"]
+    Tool steps from audit are a FALLBACK — merged only when the span-derived trace
+    carries no tool steps (OTel remains the authoritative source; no double counting).
+    The response's usage_total fills usage_tokens when spans reported none, so the
+    cost dimension also works for agents that only track a total.
+    """
+    entries = resp.get("audit") if isinstance(resp.get("audit"), list) \
+        else (resp.get("steps") if isinstance(resp.get("steps"), list) else [])
+    tool_steps = [s for s in trace.steps if s.kind == "tool"]
+    if entries and not tool_steps:
+        base_idx = len(trace.steps)
+        added: List[TraceStep] = []
+        for i, entry in enumerate(entries):
+            tn = _audit_tool_name(entry)
+            if not tn:
+                continue
+            status, summary = "ok", ""
+            if isinstance(entry, dict):
+                status = str(entry.get("status") or "ok").lower()
+                summary = str(entry.get("summary") or entry.get("result") or "")
+            attrs = {"tool.name": tn, "audit": True}
+            if summary:
+                attrs["audit.summary"] = summary[:200]
+            added.append(TraceStep(idx=base_idx + i, kind="tool", name="tool.execute",
+                                   status="denied" if status in _DENIED_STATUSES else status,
+                                   attrs=attrs))
+        if added:
+            trace.steps.extend(added)
+            for s in added:
+                tn = s.attrs["tool.name"]
+                if tn not in trace.tool_calls:
+                    trace.tool_calls.append(tn)
+                if s.status == "denied":
+                    if tn not in trace.denied_tools:
+                        trace.denied_tools.append(tn)
+                elif tn not in trace.executed_tools:
+                    trace.executed_tools.append(tn)
+    try:
+        resp_usage = int(resp.get("usage_total") or 0)
+    except (TypeError, ValueError):
+        resp_usage = 0
+    if resp_usage > trace.usage_tokens:
+        trace.usage_tokens = resp_usage
+    return trace

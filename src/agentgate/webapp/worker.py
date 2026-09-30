@@ -50,6 +50,17 @@ def agent_capabilities(url: str, timeout: float = 5.0):
     return None
 
 
+def _trace_wait_s(caps) -> float:
+    """Per-case wait for asynchronously exported OTel spans, derived from /capabilities.
+
+    Agents declaring "traces": true get the full window; agents with a capabilities
+    document that lacks the flag are taken at their word (short window); unknown
+    agents (no endpoint) keep a middle window as a safety margin."""
+    if isinstance(caps, dict):
+        return 15.0 if caps.get("traces") or caps.get("otel_export") else 3.0
+    return 8.0
+
+
 def _repo_cases_dirs():
     """The source-tree cases/ dir (context files ship with the repo). Resolves for editable
     installs (parents of this file) and for the container's source copy (/app/agentgate);
@@ -296,7 +307,10 @@ class Worker(threading.Thread):
                                    proxy_sink=self.proxy_sink or None,
                                    data_root=db.data_root(),
                                    repeat_k=run.get("stability_k") or 1,
-                                   ai_cfg=ai_cfg)
+                                   ai_cfg=ai_cfg,
+                                   trace_wait_s=_trace_wait_s(
+                                       agent_capabilities(run["target_url"])
+                                       if run.get("target_url") else None))
         except Exception as e:
             traceback.print_exc()          # full stack in docker logs; runs.error keeps the repr
             db.update_run(rid, status="failed", finished_at=db.now(), error=repr(e)[:500])

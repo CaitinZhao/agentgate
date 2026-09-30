@@ -299,6 +299,22 @@ def llm_proxy(upstream: str = typer.Option(..., help="上游 LLM 网关 base_url
     uvicorn.run(proxy_app, host="0.0.0.0", port=port)
 
 
+@app.command("probe")
+def probe(url: str = typer.Argument(..., help="被测 Agent 基地址，如 http://127.0.0.1:8200"),
+          timeout: float = typer.Option(60.0, help="/invoke 合成探测的最长等待（秒）")):
+    """Pre-flight contract check for a target agent: /health + /capabilities + one synthetic
+    /invoke round-trip, validated against the invoke contract. Run this BEFORE a real
+    evaluation — a red check here means the run would break or misjudge."""
+    from ..control.probe import probe_agent
+    report = probe_agent(url, timeout=timeout)
+    icon = {"pass": "✓", "warn": "!", "fail": "✗"}
+    typer.echo("Probe %s -> %s" % (report["url"], "OK" if report["ok"] else "PROBLEMS FOUND"))
+    for c in report["checks"]:
+        typer.echo("  [%s] %-22s %s" % (icon[c["status"]], c["name"], c["detail"]))
+    typer.echo("warn = the run completes but a dimension/signal degrades; "
+               "fail = the run would break or misjudge.")
+
+
 @app.command()
 def compare(runs: List[str] = typer.Option(..., "--runs",
                                            help="2 个及以上 run 目录，重复传参：--runs a --runs b"),

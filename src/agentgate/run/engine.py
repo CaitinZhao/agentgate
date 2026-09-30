@@ -22,9 +22,14 @@ class CaseRun(BaseModel):
 
 
 class RunEngine:
-    def __init__(self, target, receiver: Optional[OTLPHTTPReceiver] = None):
+    def __init__(self, target, receiver: Optional[OTLPHTTPReceiver] = None,
+                 trace_wait_s: float = 15.0):
         self.target = target
         self.receiver = receiver
+        # how long to wait for asynchronously-exported OTel spans after the invoke returns;
+        # the worker derives it from the agent's /capabilities "traces" flag — agents that
+        # do not export spans must not pay the full window on every case
+        self.trace_wait_s = max(1.0, float(trace_wait_s))
 
     def run_case(self, case: Case) -> CaseRun:
         self.target.prepare(case.case_id)
@@ -36,7 +41,9 @@ class RunEngine:
         else:
             spans = []
         if self.receiver is not None and resp.get("trace_id"):
-            spans = self.receiver.get_spans(resp["trace_id"], timeout=15.0) or spans
+            spans = self.receiver.get_spans(resp["trace_id"], timeout=self.trace_wait_s) or spans
         trace = normalize(spans)
+        from ..trace.normalizer import merge_response_audit
+        trace = merge_response_audit(trace, resp)
         return CaseRun(case=case, response=resp, trace=trace, wall_time_s=wall,
                        raw_spans=spans)

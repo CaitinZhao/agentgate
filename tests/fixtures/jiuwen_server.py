@@ -634,7 +634,8 @@ def capabilities():
                          "gaia", "airbench", "harmbench",
                          "tau-airline", "tau-retail", "agentdojo",
                          "agentdojo-banking", "agentdojo-workspace"],
-            "llm_base_url_supported": True}
+            "llm_base_url_supported": True,
+            "traces": True}     # this agent exports OTel spans to the platform receiver
 
 
 @app.post("/invoke")

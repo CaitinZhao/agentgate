@@ -158,7 +158,8 @@ def create_benchmark(body: BenchmarkBody, user: dict = Depends(auth.require_min(
         raise HTTPException(409, "benchmark name already exists: %s" % body.name)
     bank = db.create_benchmark(
         name=body.name, visibility=body.visibility, owner_id=user["id"],
-        display_name=body.display_name, description_zh=body.description_zh,
+        display_name=body.display_name.strip() or body.name,   # default: the bank name
+        description_zh=body.description_zh,
         description_en=body.description_en, source_note=body.source_note,
         category=body.category, default_level=body.default_level,
         requirements=json.dumps(body.requirements or {}, ensure_ascii=False))

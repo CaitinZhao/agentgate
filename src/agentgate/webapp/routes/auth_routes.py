@@ -67,6 +67,7 @@ def me(user: dict = Depends(auth.current_user)):
             "created_at": user.get("created_at") or "",
             "last_login_at": user.get("last_login_at") or "",
             "ai_configured": bool(ai.get("ai_base_url") and ai.get("ai_model")),
+            "ai_prompt_dismissed": str(ai.get("ai_prompt_dismissed", "")).lower() in ("1", "true", "yes"),
             "ai": {"base_url": ai.get("ai_base_url", ""), "model": ai.get("ai_model", ""),
                    "judge_auto": str(ai.get("ai_judge_auto", "")).lower() in ("1", "true", "yes")}}
 
@@ -79,6 +80,14 @@ class AISettingsBody(BaseModel):
 
     class Config:
         extra = "ignore"
+
+
+@router.post("/me/ai-prompt-dismissed")
+def post_ai_prompt_dismissed(user: dict = Depends(auth.current_user)):
+    """First-login AI-assist prompt: remember that this user chose "later" so the
+    dialog does not nag again (it also stays hidden once AI is configured)."""
+    db.set_user_settings(user["id"], {"ai_prompt_dismissed": "1"})
+    return {"ok": True}
 
 
 @router.put("/me/ai-settings")

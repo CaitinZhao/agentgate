@@ -8,6 +8,8 @@ export interface SessionUser {
   username: string;
   role: string;
   display_name: string;
+  ai_configured?: boolean;         // filled by the /auth/me refresh in App.vue
+  ai_prompt_dismissed?: boolean;
 }
 
 export const store = reactive({

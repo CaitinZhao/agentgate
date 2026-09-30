@@ -7,7 +7,7 @@ import Sel from "./Sel.vue";
 import { api, fmtTime, hasMin, store } from "../store";
 
 const { t, locale } = useI18n();
-const props = defineProps<{ open: boolean }>();
+const props = defineProps<{ open: boolean; startTab?: "profile" | "ai" | "users" | "settings" }>();
 const emit = defineEmits<{ (e: "close"): void }>();
 
 const tab = ref<"profile" | "ai" | "users" | "settings">("profile");
@@ -29,7 +29,10 @@ const regOptions = [
   { value: "true", label: t("common.yes") }, { value: "false", label: t("common.no") }];
 
 watch(() => props.open, (v) => {
-  if (v) loadMe();                       // refresh account info each time it opens
+  if (v) {
+    tab.value = props.startTab || "profile";   // deep-link (e.g. the AI prompt opens the ai tab)
+    loadMe();                       // refresh account info each time it opens
+  }
 });
 
 async function loadMe() {

@@ -663,7 +663,8 @@ def delete_edit_draft(user_id: int, bank_id: int) -> int:
 
 # -- per-user settings (User-Center AI config, doc 34; secrets never leave the server) ----
 
-AI_KEYS = ("ai_base_url", "ai_api_key", "ai_model", "ai_judge_auto", "ai_prompts")
+AI_KEYS = ("ai_base_url", "ai_api_key", "ai_model", "ai_judge_auto", "ai_prompts",
+           "ai_prompt_dismissed")
 
 
 def set_user_settings(user_id: int, values: Dict) -> None:

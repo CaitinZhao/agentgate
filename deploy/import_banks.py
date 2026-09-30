@@ -28,7 +28,9 @@ CASES = ROOT / "agentgate" / "cases"
 GREEN, YELLOW, RED, NC = "\033[32m", "\033[33m", "\033[31m", "\033[0m"
 
 PLATFORM_PORT = 8030
-DATA_DIR = "/opt/agentgate-platform/data"       # volume root inside the host + container
+DATA_DIR = "/opt/agentgate-platform/data"       # volume root on the HOST (sftp side)
+CONTAINER_DATA = "/app/data"                    # the same volume inside agentgate-web
+QA_USER = "qa-robot"                            # import banks are public -> fixed db nesting
 
 # bank -> (display, category, default_level, requirements, local cases.jsonl, assets dir)
 BANKS = {
@@ -82,6 +84,15 @@ def _connect_sftp():
     return cli
 
 
+
+def _bank_visibility(http, name: str) -> str:
+    """Public banks nest at banks/public/<name>, private ones under the owner."""
+    r = http.get("/api/v1/benchmarks/%s" % name)
+    if r.status_code == 200:
+        return r.json().get("visibility", "public")
+    return "public"                       # import_one creates it as public next
+
+
 def import_one(http, cli, name: str) -> None:
     display, category, level, requirements, cases_rel, assets_rel = BANKS[name]
     r = http.get("/api/v1/benchmarks/%s" % name)
@@ -100,35 +111,41 @@ def import_one(http, cli, name: str) -> None:
     if not cases_file.is_file():
         fail("cases 文件不存在：%s（先跑 build_banks）" % cases_file)
     sftp = cli.open_sftp()
-    tmp = "/tmp/agentgate-import-%s" % name
+    # staging lives under the data volume: the host path for sftp, /app/data inside
+    # the container (docker exec can only see the volume, not the host's /tmp)
+    tmp_host = "%s/tmp-import/%s" % (DATA_DIR, name)
+    tmp_ctr = "%s/tmp-import/%s" % (CONTAINER_DATA, name)
+    db_ctr = "%s/banks/%s/%s/cases.db" % (CONTAINER_DATA,
+                                          "public" if _bank_visibility(http, name) == "public"
+                                          else "users/%s" % QA_USER, name)
     try:
-        cli.exec_command("mkdir -p %s" % tmp)[1].channel.recv_exit_status()
-        remote_cases = "%s/cases.jsonl" % tmp
-        sftp.put(str(cases_file), remote_cases)
+        cli.exec_command("mkdir -p %s" % tmp_host)[1].channel.recv_exit_status()
+        sftp.put(str(cases_file), "%s/cases.jsonl" % tmp_host)
         if assets_rel:
             assets = CASES / assets_rel
             fd, tar_local = tempfile.mkstemp(suffix=".tar.gz")
             os.close(fd)
             with tarfile.open(tar_local, "w:gz") as tar:
                 tar.add(str(assets), arcname="dbs")
-            sftp.put(tar_local, "%s/assets.tar.gz" % tmp)
+            sftp.put(tar_local, "%s/assets.tar.gz" % tmp_host)
             os.unlink(tar_local)
-        # import inside the platform container (module lives in the image; data volume at /app/data)
+        # import inside the platform container (module lives in the image; the volume
+        # is mounted at /app/data, and bank dbs nest under banks/public|users/<owner>)
         cmd = ("docker exec agentgate-web python -m agentgate.case.build_banks "
-               "--db-import %s/cases.jsonl --db %s/banks/%s/cases.db" % (tmp, DATA_DIR, name))
+               "--db-import %s/cases.jsonl --db %s" % (tmp_ctr, db_ctr))
         _, out, err = cli.exec_command(cmd, timeout=300)
         rc = out.channel.recv_exit_status()
         if rc != 0:
-            fail("db-import %s 失败：%s" % (name, err.read().decode()[:400]))
+            fail("db-import %s 失败：%s" % (name, err.read().decode()[:600]))
         print("    cases 导入 ✓ (%s)" % out.read().decode().strip())
         if assets_rel:
             cmd = ("docker exec agentgate-web sh -c "
-                   "'tar xzf %s/assets.tar.gz -C %s/banks/%s'" % (tmp, DATA_DIR, name))
+                   "'tar xzf %s/assets.tar.gz -C %s'" % (tmp_ctr, db_ctr.rsplit("/", 1)[0]))
             _, out, err = cli.exec_command(cmd, timeout=300)
             if out.channel.recv_exit_status() != 0:
                 fail("资产解压失败：%s" % err.read().decode()[:300])
             print("    资产（dbs）✓")
-        cli.exec_command("rm -rf %s" % tmp)[1].channel.recv_exit_status()
+        cli.exec_command("rm -rf %s" % tmp_host)[1].channel.recv_exit_status()
     finally:
         sftp.close()
     time.sleep(1)

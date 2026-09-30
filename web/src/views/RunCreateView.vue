@@ -49,7 +49,7 @@ async function submit() {
   if (!targetUrl.value.trim()) { err.value = t("runCreate.needTarget"); return; }
   if (!chosen.value.length) { err.value = t("runCreate.needBank"); return; }
   const body: any = {
-    task_name: taskName.value.trim(),
+    task_name: taskName.value.trim() || t("runCreate.defaultTaskName"),
     banks: chosen.value.map((b) => ({ bank: b.name, levels: levels.value })),
     target_url: targetUrl.value.trim(),
     proxy_enabled: proxy.value,

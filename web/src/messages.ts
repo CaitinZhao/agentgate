@@ -29,6 +29,12 @@ export const zh = {
     queued: "排队中", running: "运行中", succeeded: "已完成",
     failed: "失败", cancelled: "已取消", online: "已上线", offline: "已下线",
   },
+  aiPrompt: {
+    title: "配置 AI 辅助？",
+    text: "AI 辅助可以在评测时提供：待判题的 judge 建议、失败题根因分析、报告 AI 摘要，以及出题/评分点起草。需要你自己的 AI 网关（OpenAI 兼容）密钥。现在去配置，或稍后在右上角头像 → 用户中心里配置。",
+    configure: "去配置 AI",
+    later: "暂不，先逛逛",
+  },
   nav: {
     benchmarks: "题库",
     runs: "执行",
@@ -195,6 +201,7 @@ export const zh = {
     probing: "探测中…",
     probeResult: "目标合约检查：{ok}（! 为降级警告，✗ 为会导致跑测失败/误判的问题）",
     submit: "提交",
+    defaultTaskName: "未命名评测",
     submitted: "已提交：{name}（{n} 题，预计约 {sec} 秒，排队第 {pos} 位）",
     noBanks: "没有可跑的题库",
     stability: "稳定性验证（同题重复 k 次，比对输出一致性）",
@@ -489,6 +496,12 @@ export const en: typeof zh = {
     queued: "Queued", running: "Running", succeeded: "Finished",
     failed: "Failed", cancelled: "Cancelled", online: "Online", offline: "Offline",
   },
+  aiPrompt: {
+    title: "Configure AI assist?",
+    text: "AI assist adds judge suggestions for PENDING cases, failure root-cause analysis, an AI report summary, and question/pack drafting. It uses your own AI gateway (OpenAI-compatible) key. Configure now, or later via the avatar menu → User Center.",
+    configure: "Configure AI",
+    later: "Not now",
+  },
   nav: {
     benchmarks: "Banks",
     runs: "Runs",
@@ -663,6 +676,7 @@ export const en: typeof zh = {
     stabilityHint: "Run each case k times and compare outputs (result-consistency, orthogonal to success: consistently-wrong = stable but failing); cost ≈ k×; off by default",
     aiAssist: "AI-assisted judging (suggestions for PENDING, failure root causes, report summary; uses your User-Center AI config)",
     needTarget: "Target agent URL is required",
+    defaultTaskName: "Untitled run",
     needBank: "Select at least one bank",
     goRun: "Watch progress",
   },

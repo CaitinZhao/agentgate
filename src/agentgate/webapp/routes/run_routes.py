@@ -26,7 +26,7 @@ class RunBank(BaseModel):
 
 
 class CreateRunBody(BaseModel):
-    task_name: str
+    task_name: str = ""                   # empty -> "Untitled run" default
     banks: List[RunBank]
     target_url: str
     case_ids: Optional[List[str]] = None
@@ -246,8 +246,8 @@ def probe_agent_endpoint(body: ProbeBody, user: dict = Depends(auth.require_min(
 
 @router.post("/runs")
 def create_run(body: CreateRunBody, user: dict = Depends(auth.require_min("member"))):
-    task_name = (body.task_name or "").strip()
-    if not task_name or len(task_name) > 80:
+    task_name = (body.task_name or "").strip() or "Untitled run"    # default when left empty
+    if len(task_name) > 80:
         raise HTTPException(400, "task_name must be 1-80 characters")
     if not body.banks:
         raise HTTPException(400, "select at least one bank")

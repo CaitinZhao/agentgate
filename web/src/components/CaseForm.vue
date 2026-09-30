@@ -102,6 +102,9 @@ function payload() {
 }
 function submit() {
   if (!f.query.trim()) { alert(t("edit.queryRequired")); return; }
+  if (!f.case_id.trim() && !caseIdLocked) {
+    f.case_id = "case-" + Date.now().toString(36);   // empty -> auto id
+  }
   emit("submit", payload());
 }
 

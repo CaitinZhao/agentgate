@@ -92,6 +92,17 @@ df -h /opt                                              # ≥5GB 可用
 docker pull hello-world                                 # 出网检查（离线见第 7 节）
 ```
 
+**专用账号与权限**：建一个部署专用账号（示例 `agent`）并加入 docker 组；有 sudo 的
+root 等价账号也可直接用（实测 openEuler 22.03 的 `agent` 账号 uid=0）：
+
+```bash
+useradd -m -s /bin/bash agent && passwd agent
+usermod -aG wheel agent       # openEuler/RHEL 用 wheel 组；Debian/Ubuntu 用 sudo 组
+usermod -aG docker agent      # 免 sudo 跑 docker（重新登录生效）
+```
+
+预检一行（应全部通过再进部署）：`sudo -n true; docker ps; df -h /opt; ss -tlnp | grep -E ':(8030|4318|8300|8200) '`
+
 **安全组放行**：`8030`（Web UI，对使用者开放）；`4318/8300` 仅跨机 Agent 时需要；
 `8200`（样例 Agent）**不建议对公网开放**（无鉴权）。所有端口可用 compose/部署参数改
 （见第 6 节），改了记得同步安全组。
@@ -140,6 +151,35 @@ python agentgate/deploy/deploy_all.py --skip-build          # 不重建镜像，
 脚本五步：本地预检（paramiko/凭据文件/环境变量）→ 远程预检（docker/磁盘/端口）→
 部署 Agent（打包上传约 124MB，断线自动重试 3 次）→ 部署平台 → 四端点体检。
 若目标服务器要跑样例 Agent 但 `tests/fixtures/.env` 没配，预检会明确报错并给指引。
+
+### 5.1 全量流水线：部署 → 六库灌入 → agentdojo 全量 → 体检
+
+部署只是第一步。完整跑通"六个开源 benchmark + agentdojo 全量"的四段式（示例以
+8.92.9.37 为例；命令均在部署机执行）：
+
+```bash
+export AGENTGATE_DEPLOY_HOST=8.92.9.37 AGENTGATE_DEPLOY_USER=agent AGENTGATE_DEPLOY_PASSWORD='...'
+cd agentgate/deploy
+
+# ① 一键部署（被测 Agent + 平台 + 体检；含打包上传与镜像构建，10-25 分钟）
+python deploy_all.py --owner-password <owner 初始密码>
+
+# ② 六库灌入：建库 + 导题 + 资产（bfcl/spider/gaia/airbench/agentdojo/harmbench）
+python import_banks.py                       # 子集用 --banks agentdojo,gaia
+
+# ③ agentdojo 全量排队（391 题；目标 = 服务器上的样例 Agent）
+T=$(curl -s -X POST http://$AGENTGATE_DEPLOY_HOST:8030/api/v1/auth/login      -H 'Content-Type: application/json'      -d '{"username":"qa-robot","password":"qa-robot-pass-1"}'      | python -c 'import json,sys;print(json.load(sys.stdin)["token"])')
+curl -s -X POST http://$AGENTGATE_DEPLOY_HOST:8030/api/v1/runs      -H "Authorization: Bearer $T" -H 'Content-Type: application/json'      -d '{"task_name":"agentdojo 全量","banks":[{"bank":"agentdojo","levels":[]}],           "target_url":"http://127.0.0.1:8200","proxy_enabled":true,"ai_assist":false}'
+
+# ④ 体检与进度（在服务器上执行 127.0.0.1 版本亦可）
+curl -s http://$AGENTGATE_DEPLOY_HOST:8030/api/v1/health     # 平台
+curl -s http://$AGENTGATE_DEPLOY_HOST:8030/api/v1/runs       # 队列与结果（Web UI 同源）
+```
+
+前置条件与说明：② 依赖部署机本地已生成六个题库文件（`cases/*/cases.jsonl`，生成方式见
+[公共题库](public-banks.md)）；③ 的 agentdojo 剖面由 agent 容器内 pip 安装的官方包提供
+（一键部署已带上）；agentdojo 由原生口径判定，`ai_assist` 关闭即可；全量 391 题耗时与
+模型速度线性相关——先用 `case_ids` 抽 5 题估成本再全量。
 
 ## 6. 端口与配置：在哪改什么
 

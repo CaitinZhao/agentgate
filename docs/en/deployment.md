@@ -91,6 +91,18 @@ df -h /opt                          # >= 5 GB free
 docker pull hello-world             # egress check (offline: section 7)
 ```
 
+**Dedicated account and permissions**: create a deploy-only account (example `agent`)
+and add it to the docker group; a sudo/root-equivalent account works as-is (the
+`agent` account on an openEuler 22.03 host was uid=0 in practice):
+
+```bash
+useradd -m -s /bin/bash agent && passwd agent
+usermod -aG wheel agent       # wheel on openEuler/RHEL; the sudo group on Debian/Ubuntu
+usermod -aG docker agent      # run docker without sudo (re-login to apply)
+```
+
+One-line preflight (all should pass before deploying): `sudo -n true; docker ps; df -h /opt; ss -tlnp | grep -E ':(8030|4318|8300|8200) '`
+
 Security group: open **8030** (Web UI); 4318/8300 only for cross-machine agents; keep
 **8200 off the public internet** (the sample agent has no auth). All ports are
 configurable (section 6) — update the security group when you change them.
@@ -135,6 +147,37 @@ Stages: local preflight (paramiko / credential file / env vars) -> remote prefli
 (docker / disk / busy ports) -> agent deploy (124MB bundle upload, 3 retries) -> platform
 deploy -> four-endpoint health check. If the sample agent is included but
 `tests/fixtures/.env` is missing, the preflight fails with clear instructions.
+
+### 5.1 Full pipeline: deploy -> import six banks -> full agentdojo -> health
+
+Deploying is only step one. The four-stage pipeline for "six open benchmarks + the full
+agentdojo run" (example host 8.92.9.37; commands run on the deploy machine):
+
+```bash
+export AGENTGATE_DEPLOY_HOST=8.92.9.37 AGENTGATE_DEPLOY_USER=agent AGENTGATE_DEPLOY_PASSWORD='...'
+cd agentgate/deploy
+
+# 1) one-click deploy (target agent + platform + health check; 10-25 min)
+python deploy_all.py --owner-password <owner initial password>
+
+# 2) import the six banks (create + cases + assets: bfcl/spider/gaia/airbench/agentdojo/harmbench)
+python import_banks.py                       # subset: --banks agentdojo,gaia
+
+# 3) queue the full agentdojo run (391 cases; target = the sample agent on the server)
+T=$(curl -s -X POST http://$AGENTGATE_DEPLOY_HOST:8030/api/v1/auth/login      -H 'Content-Type: application/json'      -d '{"username":"qa-robot","password":"qa-robot-pass-1"}'      | python -c 'import json,sys;print(json.load(sys.stdin)["token"])')
+curl -s -X POST http://$AGENTGATE_DEPLOY_HOST:8030/api/v1/runs      -H "Authorization: Bearer $T" -H 'Content-Type: application/json'      -d '{"task_name":"agentdojo full","banks":[{"bank":"agentdojo","levels":[]}],           "target_url":"http://127.0.0.1:8200","proxy_enabled":true,"ai_assist":false}'
+
+# 4) health & progress (127.0.0.1 works too when run on the server)
+curl -s http://$AGENTGATE_DEPLOY_HOST:8030/api/v1/health     # platform
+curl -s http://$AGENTGATE_DEPLOY_HOST:8030/api/v1/runs       # queue & results (same source as the Web UI)
+```
+
+Prerequisites: step 2 needs the six generated case files on the deploy machine
+(`cases/*/cases.jsonl`, see [Public banks](public-banks.md)); the agentdojo profile in
+step 3 comes from the official package pip-installed inside the agent container (the
+one-click deploy ships it); agentdojo is judged by its native reading, so `ai_assist`
+can stay off; the 391-case run scales with model speed — sample 5 cases via `case_ids`
+first.
 
 ## 6. Ports and configuration: what to change where
 

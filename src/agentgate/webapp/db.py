@@ -572,6 +572,24 @@ def add_run_item(run_id: str, case_id: str, bank: str, level: str, verdict: str,
         con.close()
 
 
+def set_item_verdicts(run_id: str, verdicts: Dict[str, str],
+                      asis: Dict[str, str] = None) -> int:
+    """rejudge replay write-back: fresh hard verdicts (+ ASI) for every item in one
+    transaction; final rulings were already folded into the verdicts by the caller."""
+    con = connect()
+    try:
+        n = 0
+        for cid, v in (verdicts or {}).items():
+            cur = con.execute("UPDATE run_items SET verdict=?, asi=? "
+                              "WHERE run_id=? AND case_id=?",
+                              (v, ((asis or {}).get(cid) or "")[:300], run_id, cid))
+            n += cur.rowcount
+        con.commit()
+        return n
+    finally:
+        con.close()
+
+
 def list_run_items(run_id: str) -> List[Dict]:
     con = connect()
     try:

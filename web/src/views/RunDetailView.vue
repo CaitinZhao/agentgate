@@ -213,6 +213,21 @@ async function applyGoldFix() {
   gf.saving = false;
 }
 
+// why each radar axis shows n/a (B3): the null is honest, the reason must be visible
+const naReasons = computed<Record<string, string>>(() => {
+  const rs = scores.value?.run_scores || {};
+  const pend = (scores.value?.counts?.pending || 0) > 0;
+  const out: Record<string, string> = {};
+  for (const d of ["success", "quality", "reliability", "stability", "efficiency", "cost", "safety"]) {
+    if (typeof rs[d] === "number") continue;
+    if (d === "cost") out[d] = t("scores.na.usage");
+    else if (d === "stability") out[d] = t("scores.na.repeat");
+    else if (pend) out[d] = t("scores.na.pending");
+    else out[d] = t("scores.na.generic");
+  }
+  return out;
+});
+
 // native (dataset-original) reading chips per bank — the dual-score convention
 const nativeRows = computed(() => {
   const nat = scores.value?.native;
@@ -263,7 +278,7 @@ function dl(fname: string) {
     <div class="card" v-if="done && scores && scores.run_scores">
       <h4 style="margin: 0 0 4px">{{ $t("scores.title") }}</h4>
       <div class="inline" style="align-items: flex-start">
-        <ScoreRadar :scores="scores.run_scores" :size="260" />
+        <ScoreRadar :scores="scores.run_scores" :na-reasons="naReasons" :size="260" />
         <div style="flex: 1; min-width: 0">
           <div class="inline" style="margin-bottom: 8px">
             <b>{{ $t("scores.total") }}:

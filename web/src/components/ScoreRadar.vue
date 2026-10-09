@@ -1,16 +1,20 @@
 <script setup lang="ts">
 // Six-dimension radar (doc 35 §2): SVG, no deps. Draws one or two polygons (compare mode).
 // Dimensions without data (null) show "n/a" and BREAK the polygon at that axis — no fake
-// zero, no misleading chord across the missing dimension. Labels use the same names as the
-// diagnostic chips (scores.dim.*) and the canvas is wide enough to avoid label clipping.
+// zero, no misleading chord across the missing dimension. Null axes carry a REASON
+// (naReasons: "target returned no usage data" / "repeat off" / "pending cases") as a
+// hover tooltip plus a footnote list — an unexplained n/a reads as a broken system.
+// Labels use the same names as the diagnostic chips (scores.dim.*) and the canvas is
+// wide enough to avoid label clipping.
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 
 const props = withDefaults(defineProps<{
   scores: Record<string, number | null>;
   compare?: Record<string, number | null> | null;
+  naReasons?: Record<string, string> | null;
   size?: number;
-}>(), { compare: null, size: 260 });
+}>(), { compare: null, naReasons: null, size: 260 });
 
 const DIMS = ["success", "quality", "reliability", "stability", "efficiency", "cost", "safety"];
 const { t } = useI18n();
@@ -60,28 +64,44 @@ const labels = computed(() => DIMS.map((d, i) => {
   const cmp = val(props.compare, i);
   const name = t("scores.dim." + d);
   const fmt = (n: number | null) => (n === null ? "n/a" : String(Math.round(n)));
-  return { x, y, anchor, name,
+  const reason = (v === null && props.naReasons?.[d]) || "";
+  return { x, y, anchor, name, reason,
            text: `${name} ${fmt(v)}${props.compare ? " / " + fmt(cmp) : ""}` };
 }));
+const naList = computed(() => DIMS
+  .filter((d) => val(props.scores, DIMS.indexOf(d)) === null)
+  .map((d) => ({ dim: d, name: t("scores.dim." + d),
+                 reason: props.naReasons?.[d] || t("scores.na.generic") })));
 </script>
 
 <template>
-  <svg :width="size + PAD" :height="size" class="radar">
-    <g v-for="r in rings" :key="r">
-      <polygon :points="DIMS.map((_, i) => pt(i, (R * r) / 100).map((v) => v.toFixed(1)).join(',')).join(' ')"
-               fill="none" stroke="#e2e8f0" stroke-width="1" />
-    </g>
-    <line v-for="(d, i) in DIMS" :key="'spoke' + i" :x1="cx" :y1="cy"
-          :x2="pt(i, R)[0].toFixed(1)" :y2="pt(i, R)[1].toFixed(1)" stroke="#e2e8f0" />
-    <path v-if="segsB" :d="segsB" fill="rgba(59,130,246,.10)" :fill-opacity="completeB ? 1 : 0"
-          stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="4 3" />
-    <path v-if="segsA" :d="segsA" fill="rgba(16,185,129,.16)" :fill-opacity="completeA ? 1 : 0"
-          stroke="#059669" stroke-width="2" />
-    <text v-for="(l, i) in labels" :key="'lb' + i" :x="l.x" :y="l.y" :text-anchor="l.anchor"
-          class="radar-label" font-size="11.5" fill="#475569">{{ l.text }}</text>
-  </svg>
+  <div>
+    <svg :width="size + PAD" :height="size" class="radar">
+      <g v-for="r in rings" :key="r">
+        <polygon :points="DIMS.map((_, i) => pt(i, (R * r) / 100).map((v) => v.toFixed(1)).join(',')).join(' ')"
+                 fill="none" stroke="#e2e8f0" stroke-width="1" />
+      </g>
+      <line v-for="(d, i) in DIMS" :key="'spoke' + i" :x1="cx" :y1="cy"
+            :x2="pt(i, R)[0].toFixed(1)" :y2="pt(i, R)[1].toFixed(1)" stroke="#e2e8f0" />
+      <path v-if="segsB" :d="segsB" fill="rgba(59,130,246,.10)" :fill-opacity="completeB ? 1 : 0"
+            stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="4 3" />
+      <path v-if="segsA" :d="segsA" fill="rgba(16,185,129,.16)" :fill-opacity="completeA ? 1 : 0"
+            stroke="#059669" stroke-width="2" />
+      <text v-for="(l, i) in labels" :key="'lb' + i" :x="l.x" :y="l.y" :text-anchor="l.anchor"
+            class="radar-label" font-size="11.5" fill="#475569">{{ l.text }}
+        <title v-if="l.reason">{{ l.name }} n/a — {{ l.reason }}</title>
+      </text>
+    </svg>
+    <div v-if="naList.length" class="radar-na muted">
+      <span v-for="n in naList" :key="n.dim" class="radar-na-item">
+        {{ n.name }}: {{ n.reason }}
+      </span>
+    </div>
+  </div>
 </template>
 
 <style>
 .radar .radar-label { font-family: inherit; }
+.radar-na { font-size: 11.5px; margin-top: 2px; max-width: 420px; display: flex;
+            flex-direction: column; gap: 1px; }
 </style>

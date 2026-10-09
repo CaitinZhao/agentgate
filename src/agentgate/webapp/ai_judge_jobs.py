@@ -22,12 +22,15 @@ _run_lock = threading.Lock()         # serializes the actual LLM work across job
 
 
 def enqueue(run_id: str, case_ids: List[str],
-            judge_fn: Callable[[str], Dict]) -> str:
+            judge_fn: Callable[[str], Dict],
+            adopt_fn: Optional[Callable[[str, Dict], Optional[str]]] = None) -> str:
     """Create a job for the given PENDING case ids and start it in the background.
 
     judge_fn(case_id) -> suggestion dict; raises on per-case failure (recorded in
-    job["failed"], the loop continues). If a job is already active for this run,
-    that job's id is returned instead — enqueue is idempotent per run.
+    job["failed"], the loop continues). adopt_fn(case_id, suggestion) -> adopted
+    verdict (or None to keep it a suggestion) — the A4 auto-adoption hook, called
+    between cases; its result is recorded per case. If a job is already active for
+    this run, that job's id is returned instead — enqueue is idempotent per run.
     """
     job_id = uuid.uuid4().hex[:12]
     state = {"id": job_id, "run_id": run_id, "status": "running", "cancel": False,
@@ -46,13 +49,23 @@ def enqueue(run_id: str, case_ids: List[str],
                         break
                 try:
                     sug = judge_fn(case_id)
+                    adopted = None
+                    if adopt_fn is not None:
+                        try:
+                            adopted = adopt_fn(case_id, sug)
+                        except Exception as e:
+                            adopted = None
+                            with _lock:
+                                _jobs[job_id]["failed"].append(
+                                    {"case_id": case_id, "error": "adopt: %s" % str(e)[:200]})
                     with _lock:
                         st = _jobs[job_id]
                         st["judged"].append({
                             "case_id": case_id,
                             "verdict_suggest": sug.get("verdict_suggest"),
                             "score": sug.get("score"),
-                            "covered": len(sug.get("coverage") or [])})
+                            "covered": len(sug.get("coverage") or []),
+                            "adopted": adopted or None})
                         st["done"] += 1
                 except Exception as e:
                     with _lock:

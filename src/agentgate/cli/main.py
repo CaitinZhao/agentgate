@@ -359,5 +359,32 @@ def analyze(run: str = typer.Option(..., help="run 输出目录"),
     typer.echo("分析报告：%s（+%s）" % (out_zh, out_en.name))
 
 
+@app.command()
+def rejudge(run_id: str = typer.Argument(..., help="run id（run-…，见 Web 端执行记录）")):
+    """重判回放：用存档的答案/轨迹 + 当前题库重放硬判定（不重跑被测 Agent）。
+    人工/AI 终判保留；eval_results / scores / 报告 / run_items 原地重写。"""
+    from ..webapp import db
+    from ..webapp.rejudge import rejudge_run as _replay
+    run = db.get_run(run_id)
+    if not run:
+        typer.echo("run not found: %s" % run_id)
+        raise typer.Exit(1)
+    if run["status"] != "succeeded":
+        typer.echo("run not finished: %s (only succeeded runs can be re-judged)" % run["status"])
+        raise typer.Exit(1)
+    summary = _replay(run)
+    c = summary["counts"]
+    typer.echo("rejudged %d/%d items" % (summary["rejudged"], summary["total_items"]))
+    typer.echo("verdicts: PASS %s / FAIL %s / PENDING %s / SKIPPED %s" %
+               (c.get("pass"), c.get("fail"), c.get("pending"), c.get("skipped")))
+    typer.echo("changed: %d (AI-quality overridden: %s)" %
+               (len(summary["changes"]), summary.get("quality_overridden")))
+    for ch in summary["changes"][:20]:
+        typer.echo("  %s: %s -> %s%s" % (ch["case_id"], ch["from"], ch["to"],
+                                         " (ruled kept)" if ch["ruled"] else ""))
+    typer.echo("total score: %s" % summary["scores"].get("total"))
+
+
 if __name__ == "__main__":
     app()
+

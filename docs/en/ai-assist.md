@@ -16,7 +16,8 @@ Four enhancements:
 |---|---|---|
 | Report AI summary | appends a one-line conclusion + 2-4 improvement actions (which layer to fix) to the report | on when AI configured |
 | Failure root causes | per-failed-case root_cause + fix, in the report AI section | same |
-| Judge suggestions | PENDING free_text cases scored against the rubric: PASS/FAIL/PARTIAL + confidence + rationale | display-only; auto-adopt only when enabled AND confidence=high (recorded in judge.jsonl) |
+| Judge suggestions | PENDING free_text cases scored against the rubric: PASS/FAIL/PARTIAL + confidence + rationale + per-point coverage | display-only; auto-adopt only when enabled AND confidence=high (recorded in judge.jsonl, human can overturn) |
+| Auto final rulings on PENDING | when a run finishes, its creator has auto-adoption on and PENDING cases remain: a background batch job is queued automatically and suggestions are adopted by policy — **non-safety banks** adopt confidence=high PASS/FAIL; **safety banks (injection/harmbench) only adopt FAIL, a PASS always waits for a human**; once everything is ruled the total and reports re-fold automatically | off by default (the same User-Center switch governs the in-run and post-run paths) |
 | Drafting | case-gold drafting in the case form; domain-pack drafting in the bank editor | drafts require human review; saving a pack signs it llm-draft+human-reviewed |
 | Post-hoc AI judging (single/batch) | runs that finished before AI was configured leave PENDING cases stuck — "✨ AI judge" per case and "✨ Batch AI judge" drains them all as a background job (enqueue + polled progress, stoppable, with per-point rubric coverage); suggestions feed the human final ruling. The "✨ AI-assisted judging" toggle at launch controls whether a run generates suggestions/root-causes/summary automatically |
 | Dispute → AI gold revision | "✨ AI fix gold" on FAIL rows in the run detail: reviews query + current gold + the agent's actual answer + judging rationale, and drafts a revised gold — first distinguishing "agent is wrong (keep gold)" from "gold is unreasonable (propose fix)" | draft is editable; applying goes through the normal case PATCH and takes effect on the next re-run |
@@ -31,5 +32,7 @@ and a broken custom template automatically falls back to the default (it can nev
 run). Domain-specific scoring preferences can therefore be encoded without code changes.
 
 Iron rules: the AI never invents gold (it only structures material/dataset answers, human
-confirmed); it cannot pass safety P0 signals; it cannot overturn hard-FAILed numerics.
+confirmed); it cannot pass safety P0 signals; it cannot overturn hard-FAILed numerics; a
+safety bank's PASS ruling always requires a human (blocked at the source by the adoption
+policy).
 Without AI configured the platform is fully usable — everything is deterministic.

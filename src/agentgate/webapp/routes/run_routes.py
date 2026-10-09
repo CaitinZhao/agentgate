@@ -7,6 +7,7 @@ prefix search. Members see only their own runs; admins/owners see everyone's.
 import datetime
 import json
 import re
+import traceback
 from pathlib import Path
 from typing import List, Optional
 
@@ -17,6 +18,7 @@ from pydantic import BaseModel
 from .. import auth, banks, db
 from .. import ai_judge_jobs
 from ..worker import VALID_LEVELS, resolve_run_cases
+from ..report_rebuild import rebuild_base_reports as _rebuild_base_reports
 
 router = APIRouter(prefix="/api/v1", tags=["runs"])
 
@@ -468,58 +470,9 @@ def case_detail(run_id: str, case_id: str, user: dict = Depends(auth.require_min
 
 
 def _ai_judge_one(run: dict, case_id: str, cfg: dict, user: dict) -> dict:
-    """Judge ONE PENDING case post-hoc (suggestion only); appends to judge.jsonl so the
-    run detail picks it up as the reviewer's decision aid."""
-    item = next((i for i in db.list_run_items(run["id"]) if i["case_id"] == case_id), None)
-    if not item:
-        raise HTTPException(404, "case not in this run: %s" % case_id)
-    if item["verdict"] != "PENDING":
-        raise HTTPException(400, "case is %s — only PENDING cases need judging" % item["verdict"])
-    bank = db.get_benchmark(item["bank"])
-    if not bank:
-        raise HTTPException(404, "bank not found: %s" % item["bank"])
-    from .benchmark_routes import _get_visible_bank, _require_manage
-    _require_manage(_get_visible_bank(bank["name"], user), user)
-    owner = db.get_user(bank["owner_id"]) if bank.get("owner_id") else None
-    path = banks.bank_db_path(bank, owner["username"] if owner else "")
-    from ...case.store import load_cases_db
-    case = next((c for c in load_cases_db(str(path), status=None)
-                 if c.case_id == case_id), None)
-    if not case:
-        raise HTTPException(404, "case not found in bank: %s" % case_id)
-    # the archived answer stands in for the live response; process evidence from runs_meta
-    response, tool_calls = {}, []
-    ap = Path(run["result_dir"] or "") / "answers.jsonl"
-    if ap.is_file():
-        for line in ap.read_text(encoding="utf-8").splitlines():
-            if line.strip():
-                d = json.loads(line)
-                if d.get("case_id") == case_id:
-                    response = {"answer_text": d.get("answer_text", ""),
-                                "final_json": d.get("final_json") or {}}
-                    break
-    mp = Path(run["result_dir"] or "") / "runs_meta.json"
-    if mp.is_file():
-        try:
-            meta = json.loads(mp.read_text(encoding="utf-8"))
-            if isinstance(meta, dict):
-                meta = meta.get("runs") or []
-            m = next((m for m in meta if m.get("task_id") == case_id), None)
-            tool_calls = (m or {}).get("tool_calls") or []
-        except ValueError:
-            pass
-    judge_out = {"process": {"n_tool_calls": len(tool_calls)}}
-    from ...case import packs as pack_reg
-    pack = pack_reg.resolve_pack(case, data_root=db.data_root())
-    from ...analysis import ai_client
-    sug = ai_client.judge_suggestion(cfg, case, pack, response, judge_out)
-    if not sug:
-        raise HTTPException(502, "AI judge failed (check the User Center AI config / gateway)")
-    sug.update({"case_id": case_id, "adopted": False, "post_hoc": True})
-    jp = Path(run["result_dir"] or "") / "judge.jsonl"
-    with jp.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(sug, ensure_ascii=False) + "\n")
-    return sug
+    """Shared implementation lives in ai_judge_core (used by the auto-adopt watcher too)."""
+    from ..ai_judge_core import ai_judge_one
+    return ai_judge_one(run, case_id, cfg, user)
 
 
 @router.post("/runs/{run_id}/cases/{case_id}/ai-judge")
@@ -601,26 +554,35 @@ def review_item(run_id: str, body: ReviewBody,
     if n == 0:
         raise HTTPException(404, "no PENDING item %s in this run" % body.case_id)
     # when no PENDING remains: fold the rulings into scores.json + record the final gate
-    items = db.list_run_items(run_id)
-    open_pending = [i for i in items if i["verdict"] == "PENDING" and not i.get("final_verdict")]
-    if not open_pending and run["result_dir"]:
-        from ...analysis.scores import rescore_after_review
-        sp = Path(run["result_dir"]) / "scores.json"
-        reviews = [{"case_id": i["case_id"], "final_verdict": i["final_verdict"],
-                    "reviewed_by": i["reviewed_by"], "review_note": i["review_note"]}
-                   for i in items if i["verdict"] == "PENDING" and i.get("final_verdict")]
-        try:
-            scores = json.loads(sp.read_text(encoding="utf-8"))
-            scores = rescore_after_review(scores, reviews)
-            sp.write_text(json.dumps(scores, ensure_ascii=False, indent=1), encoding="utf-8")
-            db.update_run(run_id, final_gate=scores.get("final_gate"),
-                          score=str(scores.get("total") or ""))
-            # the rulings changed the statistics — refresh the report files too
-            # (any existing AI summary section is preserved verbatim)
-            _rebuild_base_reports(run, Path(run["result_dir"]))
-        except OSError:
-            pass
-    return {"ok": True, "open_pending": len(open_pending)}
+    # (shared with the A4 auto-adoption watcher: one fold, one rule)
+    from ..fold import fold_if_complete
+    open_pending = fold_if_complete(run)
+    return {"ok": True, "open_pending": open_pending}
+
+
+@router.post("/runs/{run_id}/rejudge")
+def rejudge(run_id: str, user: dict = Depends(auth.require_min("member"))):
+    """Re-judge replay (A2): replay the hard judge over the archived answers + traces
+    with the CURRENT bank gold — no agent invocation. Fixing the judging kernel or the
+    bank must be replayable; human/AI final rulings keep winning over fresh hard
+    verdicts. Artifacts (eval_results / scores / gate / reports) and run_items are
+    rewritten in place."""
+    run = _get_own_or_admin_run(run_id, user)
+    if run["status"] != "succeeded":
+        raise HTTPException(400, "run not finished: %s" % run["status"])
+    from ..rejudge import rejudge_run as _replay
+    try:
+        summary = _replay(run)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(500, "rejudge failed: %s" % str(e)[:300])
+    return {"ok": True, "rejudged": summary["rejudged"],
+            "total_items": summary["total_items"],
+            "changed": len(summary["changes"]),
+            "changes_preview": summary["changes"][:50],
+            "counts": summary["counts"], "total": summary["scores"].get("total")}
 
 
 class GoldFixBody(BaseModel):
@@ -764,88 +726,6 @@ def run_artifact(run_id: str, fname: str, user: dict = Depends(auth.require_min(
 class CompareBody(BaseModel):
     run_ids: List[str]
     lang: str = "zh"
-
-
-def _rebuild_base_reports(run: dict, out_dir: Path) -> dict:
-    """Rebuild report.md/-en.md from the archived artifacts with the CURRENT
-    (statistics-only) template; preserves any existing AI summary section.
-    Best-effort: returns {lang: preserved_ai_section}."""
-    preserved = {}
-    try:
-        results = json.loads((out_dir / "eval_results.json").read_text(encoding="utf-8"))
-        scores_stored = json.loads((out_dir / "scores.json").read_text(encoding="utf-8"))
-        runs_meta = json.loads((out_dir / "runs_meta.json").read_text(encoding="utf-8"))
-        from ...result.gates import evaluate_gate
-        from ...result.report import build_report
-        # eval_results.json is archived before review; fold in the human final rulings
-        # recorded on the run items so the report reflects the post-review state
-        ruled = {i["case_id"]: i["final_verdict"]
-                 for i in db.list_run_items(run["id"]) if i.get("final_verdict")}
-        if ruled:
-            for r in results:
-                fv = ruled.get(r.get("task_id"))
-                if fv and r["scores"].get("human_review") == "pending":
-                    r["scores"]["human_review"] = "pass" if fv == "PASS" else "fail"
-        gate = evaluate_gate(results)
-
-        def _state(r):
-            # human ruling wins, then the deterministic/rule gate, else awaiting review
-            hv = r["scores"].get("human_review")
-            if hv in ("pass", "fail"):
-                return hv
-            if r["task_id"] in gate["failures"]:
-                return "fail"
-            return "pending" if hv == "pending" else "pass"
-
-        resolved_fails = [r["task_id"] for r in results if _state(r) == "fail"]
-        resolved_pends = [r["task_id"] for r in results if _state(r) == "pending"]
-        if resolved_fails:
-            decision = "FAIL"
-        elif resolved_pends:
-            decision = "PENDING(%d)" % len(resolved_pends)
-        else:
-            decision = "GREEN"
-        gate = dict(gate, decision=decision, failures=resolved_fails,
-                    score=("%d/%d" % (len(results) - len(resolved_pends) - len(resolved_fails),
-                                      len(results) - len(resolved_pends))
-                           if (len(results) - len(resolved_pends)) > 0 else "n/a"))
-        byl, bys = {}, {}
-        for m in runs_meta:
-            byl.setdefault(m.get("level", "-"), []).append(m["task_id"])
-            bys.setdefault(m.get("suite", "-"), []).append(m["task_id"])
-
-        def _rows(groups):
-            rows = []
-            for k, tids in sorted(groups.items()):
-                tset = set(tids)
-                res = [r for r in results if r["task_id"] in tset]
-                fail = sum(1 for r in res if _state(r) == "fail")
-                pend = sum(1 for r in res if _state(r) == "pending")
-                rows.append({"suite": k, "level": k, "total": len(res),
-                             "pass": len(res) - fail - pend, "fail": fail, "pending": pend})
-            return rows
-
-        meta = {"time": run.get("finished_at") or run.get("created_at") or "",
-                "level_rows": _rows(byl), "suite_rows": _rows(bys),
-                "target": run.get("target_url", ""),
-                "model": (runs_meta[0].get("model") if runs_meta else "-"),
-                "eval_set_version": (results[0].get("eval_set_version") if results else "-"),
-                "repeat_k": run.get("stability_k") or 1, "scores": scores_stored,
-                "ai_used": False}
-        for lang, suffix in (("zh", ""), ("en", "-en")):
-            rp = out_dir / ("report%s.md" % suffix)
-            old = rp.read_text(encoding="utf-8") if rp.is_file() else ""
-            marker = "## AI 摘要与改进建议" if lang == "zh" else "## AI Summary"
-            idx = old.find(marker)
-            if idx != -1:
-                # preserve ONLY the AI section (up to the next top-level heading),
-                # never the rest of the old report body
-                nxt = old.find(chr(10) + "## ", idx + 10)
-                preserved[lang] = old[idx:nxt if nxt != -1 else len(old)].strip()
-            rp.write_text(build_report(results, gate, meta, lang=lang), encoding="utf-8")
-    except Exception:
-        pass
-    return preserved
 
 
 @router.post("/runs/{run_id}/rebuild-report")

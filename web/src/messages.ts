@@ -377,6 +377,12 @@ export const zh = {
       success: "任务成功", quality: "结果质量", reliability: "过程可靠",
       stability: "稳定", efficiency: "执行效率", cost: "成本", safety: "安全",
     },
+    na: {
+      usage: "目标未回传用量（tokens=0），成本不可测",
+      repeat: "未开启重复验证（stability_k=1）",
+      pending: "仍有待判题（PENDING），判定后补齐",
+      generic: "本次运行该维度无信号",
+    },
   },
   edit: {
     title: "编辑题库",
@@ -849,6 +855,12 @@ export const en: typeof zh = {
     dim: {
       success: "Success", quality: "Quality", reliability: "Reliability",
       stability: "Stability", efficiency: "Efficiency", cost: "Cost", safety: "Safety",
+    },
+    na: {
+      usage: "Target returned no usage data (tokens=0) — cost not measurable",
+      repeat: "Repeat verification off (stability_k=1)",
+      pending: "Pending cases remain — fills in once judged",
+      generic: "No signal for this dimension in this run",
     },
   },
   edit: {

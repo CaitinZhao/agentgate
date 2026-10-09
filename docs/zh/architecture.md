@@ -17,6 +17,7 @@
    报告记录 agent 身份与组件版本，而不是只给模型打分。
 3. **分层诚实判定**。硬校验（机器能唯一判定的）永远先跑；判不了的标 PENDING 交给
    AI judge 建议 / 人工终裁，永不硬凑确定性判定；数据缺失的评分维度显示 n/a，不做假分。
+   判定规则的完整口径（题型比对、红线、待判边界、重判回放）见 [判题标准](judging.md)。
 4. **judge 与题库分离**。题库只声明"什么是对的"（参考答案/检查点/rubric）；怎么判
    （判定器版本、AI judge 配置）是平台配置，换 judge 不改题库。
 5. **负分项进分数**。非预期短路径（跳步直答）、重复调用、违规尝试、成本爆炸都要扣分，
@@ -34,7 +35,8 @@
   → 被测 Agent /invoke（HTTP）+ 两条观测通道：
        ① OTLP :4318  span 轨迹（agent.run / llm.call / tool.execute）
        ② 录制代理 :8300  消息级 LLM 调用记录
-  → 判定管线（红线 → 格式 → 题型终答 → 检查点 → 过程信号）
+  → 判定管线（红线 → 格式/schema → 题型终答 → 参考答案救援 → 检查点 → 过程信号）
+  → 事后层：AI judge 建议/自动终判（安全库只自动采纳 FAIL）→ 人工终裁 → 重判回放
   → 六维评分（scores.json）+ 双语诊断报告（report.md / report-en.md）
   → 门禁（GREEN / FAIL / PENDING(n)）+ 产物归档（data/results/<run_id>/）
 ```
@@ -68,7 +70,8 @@ agent-contracts/       # 轨迹/评测结果的共享 schema 契约包（平台�
 | 主题 | 文档 | 一句话 |
 |---|---|---|
 | 轨迹录制 | [trace-recording.md](trace-recording.md) | 两条观测通道各自看什么、为什么都要有 |
-| 评分规则 | [scoring.md](scoring.md) | 三层判定流程、gold v2 字段、六维计分口径 |
+| 判题标准 | [judging.md](judging.md) | 判定层顺序、题型判定规则、红线口径、待判边界、重判回放 |
+| 评分规则 | [scoring.md](scoring.md) | gold v2 字段、六维计分口径、原生读数 |
 | 沙箱执行 | [sandbox.md](sandbox.md) | 被测 Agent 的运行形态、隔离边界与路线图 |
 | AI 辅助 | [ai-assist.md](ai-assist.md) | 平台自己的 LLM 用在哪、怎么配、边界在哪 |
 | 诊断报告 | [diagnostic-report.md](diagnostic-report.md) | 一份 run 产出哪些报告与产物、怎么读 |

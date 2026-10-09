@@ -344,3 +344,11 @@ class Worker(threading.Thread):
                              if summary.get("scores", {}).get("total") is not None
                              else str(summary["gate"].get("score", ""))),
                       result_dir=str(out_dir))
+        # A4 auto terminal AI judging: the creator opted into auto-adoption -> the
+        # remaining PENDING cases get an async judge job; high-confidence suggestions
+        # become final rulings (safety banks: FAIL only) and the scores re-fold.
+        try:
+            from . import auto_judge
+            auto_judge.enqueue_for_run(db.get_run(rid))
+        except Exception:
+            traceback.print_exc()          # never fail the run on the auto-judge hook

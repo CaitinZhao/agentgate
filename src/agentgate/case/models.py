@@ -26,6 +26,7 @@ class Checkpoint(BaseModel):
     signal: str = "content"                # tool / content / state
     pattern: str = ""
     weight: float = 1.0
+    required: bool = False                 # gate: a PASS with this checkpoint missed -> FAIL
 
 
 class RubricPoint(BaseModel):

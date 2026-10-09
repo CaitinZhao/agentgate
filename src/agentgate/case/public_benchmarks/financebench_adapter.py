@@ -129,8 +129,14 @@ def write_cases(out_dir: Path = Path("cases/L0")) -> List[Path]:
 
 # ---------------- full integration (150 cases) ----------------
 
+_NUM_RE = __import__("re").compile(r"-?\$?\s*\d[\d,]*(?:\.\d+)?")
+
+
 def _parse_gold(answer: str, question: str):
-    """Parse (unit, value) from the gold answer; return None when unparseable (the case becomes free_text)."""
+    """Parse (unit, value) from the gold answer; return None when unparseable (the case becomes free_text).
+
+    Regex extraction: prose before the number ("Corporate. Its net revenue was -$473
+    million.") must not break the scan on sentence dots."""
     a = answer.strip().lstrip("$").replace(",", "")
     q = question.lower()
     if "billion" in q or "billion" in a:
@@ -141,17 +147,13 @@ def _parse_gold(answer: str, question: str):
         unit = "%"
     else:
         return None
-    num = ""
-    for ch in a:
-        if ch.isdigit() or ch in ".-":
-            num += ch
-        elif num:
-            break
+    m = _NUM_RE.search(a)
+    if not m:
+        return None
     try:
-        v = float(num)
+        return {"unit": unit, "value": float(m.group(0).replace(",", "").replace("$", ""))}
     except ValueError:
         return None
-    return {"unit": unit, "value": v}
 
 
 def _parse_yesno(answer: str):
@@ -174,19 +176,20 @@ def build_full_fb_cases(seeds_file: Optional[Path] = None) -> List[Case]:
                                   pattern="search_filing", weight=1)]
         gold_num = _parse_gold(answer, question)
         gold_yn = _parse_yesno(answer)
+        ref = {"reference_answer": answer.strip()} if answer.strip() else {}
         if gold_num:
             ctype = "numeric"
-            gold = Gold(final={"value": gold_num["value"], "unit": gold_num["unit"],
-                               "tol_rel": 0.01}, checkpoints=checkpoints)
+            gold = Gold(final=dict({"value": gold_num["value"], "unit": gold_num["unit"],
+                                    "tol_rel": 0.01}, **ref), checkpoints=checkpoints)
             kind = "numeric_mismatch"
         elif gold_yn:
             ctype = "boolean"
-            gold = Gold(final={"value": gold_yn}, checkpoints=checkpoints)
+            gold = Gold(final=dict({"value": gold_yn}, **ref), checkpoints=checkpoints)
             kind = "wrong_answer"
         else:
             # dataset answer is the gold: becomes the single scoring point for the soft judge
             ctype = "free_text"
-            gold = Gold(final={}, checkpoints=checkpoints,
+            gold = Gold(final=dict(ref), checkpoints=checkpoints,
                         rubric=[RubricPoint(point="答案与金标一致：%s" % answer.strip()[:300],
                                             weight=1)])
             kind = "needs_judge"

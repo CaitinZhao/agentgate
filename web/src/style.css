@@ -137,7 +137,8 @@ dialog::backdrop { background: rgba(15, 30, 50, .45); }
 body:has(dialog[open])::after {
   content: ""; position: fixed; inset: 0; background: rgba(15, 30, 50, .45); z-index: 998;
 }
-dialog[open] { position: fixed; top: 60px; left: 50%; transform: translateX(-50%); z-index: 999; }
+dialog[open] { position: fixed; top: 60px; left: 50%; transform: translateX(-50%); z-index: 999;
+               max-height: calc(100vh - 84px); overflow-y: auto; }
 /* user center anchors under the top-right user button instead of screen center */
 dialog.uc-dialog[open] {
   top: 56px; left: auto; right: 12px; transform: none; margin: 0;

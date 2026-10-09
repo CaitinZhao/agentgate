@@ -24,6 +24,9 @@ def _read_rows(path: Path) -> List[Dict]:
     return [json.loads(l) for l in p.read_text(encoding="utf-8").splitlines() if l.strip()]
 
 
+_NUM_RE = __import__("re").compile(r"-?\$?\s*\d[\d,]*(?:\.\d+)?")
+
+
 def _parse_num(answer: str, question: str):
     a = answer.strip().lstrip("$").replace(",", "")
     q = question.lower()
@@ -42,30 +45,31 @@ def _parse_num(answer: str, question: str):
         unit = "元"
     else:
         return None
-    num = ""
-    for ch in a:
-        if ch.isdigit() or ch in ".-":
-            num += ch
-        elif num:
-            break
+    m = _NUM_RE.search(a)              # regex, not a char walk: prose before the number
+    if not m:                          # ("Corporate. Its net revenue was -$473 million.")
+        return None                    # must not break the scan on sentence dots
     try:
-        return {"unit": unit, "value": float(num)}
+        return {"unit": unit, "value": float(m.group(0).replace(",", "").replace("$", ""))}
     except ValueError:
         return None
 
 
 def _bucket(answer: str, question: str):
-    """(bucket, case type, gold v2) — gold keeps the dataset answer as the source of truth."""
+    """(bucket, case type, gold v2) — gold keeps the dataset answer as the source of truth.
+
+    The raw dataset answer rides along as final.reference_answer for every bucket:
+    the AI judge and the free_text reference rescue layer both score against it."""
+    ref = {"reference_answer": answer.strip()} if answer.strip() else {}
     low = answer.strip().lower()
     if low.startswith("yes"):
-        return "yesno", "boolean", {"final": {"value": "yes"}}
+        return "yesno", "boolean", {"final": dict({"value": "yes"}, **ref)}
     if low.startswith("no"):
-        return "yesno", "boolean", {"final": {"value": "no"}}
+        return "yesno", "boolean", {"final": dict({"value": "no"}, **ref)}
     num = _parse_num(answer, question)
     if num:
-        return "numeric", "numeric", {"final": {"value": num["value"], "unit": num["unit"],
-                                                "tol_rel": 0.01}}
-    return "text", "free_text", {"final": {}, "rubric": [{"point": "答案与金标一致：%s" % answer.strip()[:300], "weight": 1}] if answer.strip() else []}
+        return "numeric", "numeric", {"final": dict({"value": num["value"], "unit": num["unit"],
+                                                     "tol_rel": 0.01}, **ref)}
+    return "text", "free_text", {"final": dict(ref), "rubric": [{"point": "答案与金标一致：%s" % answer.strip()[:300], "weight": 1}] if answer.strip() else []}
 
 
 def _llm_hint(meta: Dict[str, Dict]) -> Dict[str, str]:

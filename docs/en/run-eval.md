@@ -31,6 +31,15 @@ Verdicts: PASS / FAIL (hard layer), **PENDING** (free_text etc.; not counted as 
 shows PENDING(n)), SKIPPED (environment unmet). A run whose target is unreachable is marked
 **failed** with a reason — no misleading score, dimensions n/a.
 
+### Re-judge replay (rejudge): re-decide without re-running the agent
+
+After a judging-kernel upgrade or a bank gold fix, use `agentgate rejudge <run_id>` (CLI) or
+`POST /api/v1/runs/{run_id}/rejudge` on a finished run: the whole hard layer is replayed with
+the **archived answers and traces + the CURRENT bank**, rewriting verdicts, six-dimension
+scores and reports in place. Recorded rulings (human or AI-adopted) keep priority — the fresh
+hard verdict only applies to unruly cases. The replay is idempotent. See
+[Judging standards](judging.md) §9.
+
 PENDING handling (all inside the items tab, evidence and ruling on one screen): click
 "✧ Arbitrate" to open the case detail dialog (question, full answer, gold, tool sequence,
 per-check details); "✨ AI judge" gets a suggestion with per-point rubric coverage, or

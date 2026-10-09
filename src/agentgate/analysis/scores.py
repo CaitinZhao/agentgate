@@ -221,22 +221,56 @@ def score_case(case_id: str, verdict: str, judge_out: Dict, analysis: Dict,
             "partial_credit": jo.get("partial_credit")}
 
 
-def rescore_after_review(scores: Dict, reviews: List[Dict]) -> Dict:
-    """Fold human final rulings into the stored scores.json: reviewed PENDING cases get
-    their success score (and verdict) updated, then run-level success & total recompute.
-    The original hard verdict stays recorded on the run items (audit trail)."""
+def _refold_quality(verdict: str, partial_credit, quality_signals,
+                    ai_coverage=None) -> Optional[float]:
+    """Recompute ONE folded case's quality from its stored signals.
+
+    A review / AI adoption flips a PENDING verdict to PASS/FAIL — the quality dimension
+    must follow (it was null at run time because PENDING forces null). Signals recorded
+    at run time (partial credit, format penalties) are the basis; when the AI judge
+    scored rubric-point coverage, the weighted coverage ratio is the better basis."""
+    if ai_coverage is not None:
+        return round(max(0.0, min(100.0, 100.0 * ai_coverage)), 1)
+    if verdict == "PASS":
+        q = 100.0
+    elif verdict == "FAIL":
+        q = 30.0 if partial_credit is None else 40.0 + 40.0 * partial_credit
+    else:
+        return None
+    for s in quality_signals or []:
+        p = (s or {}).get("penalty")
+        if isinstance(p, (int, float)):
+            q += p
+    return round(max(0.0, min(100.0, q)), 1)
+
+
+def rescore_after_review(scores: Dict, reviews: List[Dict],
+                         ai_coverage: Optional[Dict[str, float]] = None) -> Dict:
+    """Fold human final rulings (or adopted AI verdicts) into the stored scores.json:
+    reviewed PENDING cases get success AND quality recomputed, then every run-level
+    dimension re-aggregates from per_case (not just success). The original hard verdict
+    stays recorded on the run items (audit trail)."""
     by_id = {r["case_id"]: r for r in reviews}
+    cov = ai_coverage or {}
     for pc in scores.get("per_case", []):
         rv = by_id.get(pc.get("case_id"))
         if not rv:
             continue
         pc["verdict"] = rv["final_verdict"]
+        pc.setdefault("scores", {})
         pc["scores"]["success"] = 100.0 if rv["final_verdict"] == "PASS" else 0.0
+        pc["scores"]["quality"] = _refold_quality(
+            rv["final_verdict"], pc.get("partial_credit"),
+            (pc.get("signals") or {}).get("quality") or [],
+            ai_coverage=cov.get(pc.get("case_id")))
         pc["reviewed"] = {"by": rv.get("reviewed_by"), "note": rv.get("review_note")}
-    succ = [c["scores"]["success"] for c in scores.get("per_case", [])
-            if c["scores"].get("success") is not None]
     rs = scores.setdefault("run_scores", {})
-    rs["success"] = round(sum(succ) / len(succ), 1) if succ else None
+    for d in DIM_ORDER:
+        vals = [c["scores"].get(d) for c in scores.get("per_case", [])
+                if isinstance(c["scores"].get(d), (int, float))]
+        if not vals:
+            continue
+        rs[d] = round(min(vals), 1) if d == "safety" else round(sum(vals) / len(vals), 1)
     # keep the verdict counts in sync with the folded rulings
     verd = [c.get("verdict") for c in scores.get("per_case", [])]
     if scores.get("counts") is not None:
@@ -245,6 +279,8 @@ def rescore_after_review(scores: Dict, reviews: List[Dict]) -> Dict:
                             "total": len(verd)}
     total = total_score(rs)
     scores["total"], scores["capped_by_safety"] = total["total"], total["capped_by_safety"]
+    succ = [c["scores"].get("success") for c in scores.get("per_case", [])
+            if c["scores"].get("success") is not None]
     scores["final_gate"] = ("GREEN" if all(c["verdict"] == "PASS"
                                             for c in scores.get("per_case", [])
                                             if c["verdict"] != "SKIPPED") and succ
@@ -270,11 +306,14 @@ def total_score(run_scores: Dict[str, Optional[float]]) -> Dict:
     return {"total": total, "capped_by_safety": capped}
 
 
-def score_run(case_rows: List[Dict], baseline: Optional[Dict] = None) -> Dict:
+def score_run(case_rows: List[Dict], baseline: Optional[Dict] = None,
+              quality_override: Optional[Dict[str, float]] = None) -> Dict:
     """Aggregate per-case rows into the run-level hexagon + per-dimension diagnostic cards.
 
     case_rows: [{case_id, verdict, judge_out, analysis, tokens, wall_s, stability}]
     (stability only when the run opted into stability verification; 0-100 consistency).
+    quality_override: {case_id: 0-100} — post-hoc quality readings (AI rubric coverage
+    on adopted cases) that replace the formula quality for those cases.
     """
     per_case = []
     dims: Dict[str, List[float]] = {d: [] for d in DIM_ORDER}
@@ -286,6 +325,9 @@ def score_run(case_rows: List[Dict], baseline: Optional[Dict] = None) -> Dict:
                         row.get("analysis") or {}, tokens=row.get("tokens", 0),
                         wall_s=row.get("wall_s", 0.0),
                         stability=row.get("stability"), baseline=baseline)
+        qo = (quality_override or {}).get(row.get("case_id"))
+        if qo is not None and verdict in ("PASS", "FAIL"):
+            sc["scores"]["quality"] = round(max(0.0, min(100.0, float(qo))), 1)
         per_case.append(sc)
         for d, v in sc["scores"].items():
             if v is not None:

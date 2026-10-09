@@ -17,7 +17,9 @@ Per-topic deep dives are the sub-documents linked below.
 2. **The score's denominator is the whole agent stack** (model + prompts + tools + retrieval
    + policy). Reports record agent identity and component versions.
 3. **Layered honesty.** Hard checks run first; anything the machine cannot judge is PENDING
-   (AI judge suggestion / human); missing data shows n/a — no fake scores.
+   (AI judge suggestion / human); missing data shows n/a — no fake scores. The complete
+   standard (per-type rules, red lines, the PENDING boundary, re-judge replay) lives in
+   [Judging standards](judging.md).
 4. **Judge is separate from the bank.** Banks declare what is right (gold); how to judge
    (judge version, AI config) is platform configuration.
 5. **Penalties are part of the score.** Skip-answer shortcuts, repeated calls, denied
@@ -35,7 +37,8 @@ Banks (banks/*/cases.db, gold v2)
   -> Agent /invoke (HTTP) + two observation channels:
        (1) OTLP :4318   span-level trajectory
        (2) recording proxy :8300   message-level LLM records
-  -> Judging pipeline (red lines -> format -> typed final -> checkpoints -> process signals)
+  -> Judging pipeline (red lines -> format/schema -> typed final -> reference rescue -> checkpoints -> process signals)
+  -> Post-run layers: AI judge suggestions / auto-adoption (safety banks only adopt FAIL) -> human rulings -> re-judge replay
   -> Six-dimension scores (scores.json) + bilingual reports
   -> Gate (GREEN / FAIL / PENDING(n)) + artifacts (data/results/<run_id>/)
 ```
@@ -61,7 +64,8 @@ agent-contracts/       # shared schema package for traces / eval results
 | Topic | Doc | One-liner |
 |---|---|---|
 | Trace recording | [trace-recording.md](trace-recording.md) | what each observation channel sees, why both exist |
-| Scoring | [scoring.md](scoring.md) | three-layer judging, gold v2, six-dimension rules |
+| Judging standards | [judging.md](judging.md) | judging layers, per-type rules, red lines, the PENDING boundary, re-judge replay |
+| Scoring | [scoring.md](scoring.md) | gold v2, six-dimension rules, the native reading |
 | Sandbox | [sandbox.md](sandbox.md) | where the agent runs; isolation boundary & roadmap |
 | AI assist | [ai-assist.md](ai-assist.md) | what the platform's own LLM does, config, boundaries |
 | Diagnostic report | [diagnostic-report.md](diagnostic-report.md) | reports and artifacts of one run, how to read them |

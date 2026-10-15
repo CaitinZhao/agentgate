@@ -24,41 +24,51 @@ def _read_rows(path: Path) -> List[Dict]:
     return [json.loads(l) for l in p.read_text(encoding="utf-8").splitlines() if l.strip()]
 
 
-_NUM_RE = __import__("re").compile(r"-?\$?\s*\d[\d,]*(?:\.\d+)?")
+from ..case.gold_rules import quantity_value
 
 
 def _parse_num(answer: str, question: str):
-    a = answer.strip().lstrip("$").replace(",", "")
-    q = question.lower()
-    qa = q + " " + a
+    """(value, unit) from the dataset answer, or None.
+
+    Quantity-safety rules are shared with the FinanceBench adapter
+    (`case/gold_rules.py`): entity/yes-no questions never become numeric, years and dates
+    are not quantities, enumerations and multi-value prose without a period to
+    disambiguate fall back to free_text (AGENTS.md: judge_required over a forced verdict).
+    Coarse precision (1-2 significant digits) is NOT flagged here: the judging layer's
+    precision floor already widens the tolerance to the gold's own precision, so a second
+    guard would only drop usable cases."""
+    a = str(answer or "").strip().lstrip("$").replace(",", "")
+    q = str(question or "").lower()
+    qa = q + " " + a.lower()
     if "%" in a or "%" in q:
         unit = "%"
     elif "billion" in qa:
         unit = "USD billions"
     elif "million" in qa:
         unit = "USD millions"
-    elif "亿元" in qa:
+    elif "亿元" in q:
         unit = "亿元"
-    elif "万元" in qa:
+    elif "万元" in q:
         unit = "万元"
     elif "元" in a or "元" in q:
         unit = "元"
     else:
+        # no unit word anywhere: a bare number is still numeric (unit-less datasets);
+        # the shared rule decides whether the figure is unambiguous
+        unit = "none"
+    v, _reason = quantity_value(a, question)
+    if v is None:
         return None
-    m = _NUM_RE.search(a)              # regex, not a char walk: prose before the number
-    if not m:                          # ("Corporate. Its net revenue was -$473 million.")
-        return None                    # must not break the scan on sentence dots
-    try:
-        return {"unit": unit, "value": float(m.group(0).replace(",", "").replace("$", ""))}
-    except ValueError:
-        return None
+    return {"unit": unit, "value": v}
 
 
 def _bucket(answer: str, question: str):
     """(bucket, case type, gold v2) — gold keeps the dataset answer as the source of truth.
 
     The raw dataset answer rides along as final.reference_answer for every bucket:
-    the AI judge and the free_text reference rescue layer both score against it."""
+    the AI judge and the free_text reference rescue layer both score against it.
+    Cases that are NOT an unambiguous quantity fall back to free_text (see gold_rules):
+    a forced numeric gold is how correct answers get marked wrong."""
     ref = {"reference_answer": answer.strip()} if answer.strip() else {}
     low = answer.strip().lower()
     if low.startswith("yes"):
@@ -67,8 +77,8 @@ def _bucket(answer: str, question: str):
         return "yesno", "boolean", {"final": dict({"value": "no"}, **ref)}
     num = _parse_num(answer, question)
     if num:
-        return "numeric", "numeric", {"final": dict({"value": num["value"], "unit": num["unit"],
-                                                     "tol_rel": 0.01}, **ref)}
+        final = dict({"value": num["value"], "unit": num["unit"], "tol_rel": 0.01}, **ref)
+        return "numeric", "numeric", {"final": final}
     return "text", "free_text", {"final": dict(ref), "rubric": [{"point": "答案与金标一致：%s" % answer.strip()[:300], "weight": 1}] if answer.strip() else []}
 
 
@@ -138,6 +148,7 @@ def auto_adapt(source: str, id_field: str, question_field: str, answer_field: st
         c = {
             "case_id": cid, "version": 1, "level": level, "as_of": as_of,
             "suite": suite,
+            "status": "active",
             "source": {"origin": "public_benchmark", "seed": qid,
                        "adaptation": "autoadapt 自动分桶（%s）" % bucket,
                        "provenance": question[:120]},
@@ -180,19 +191,14 @@ def auto_adapt(source: str, id_field: str, question_field: str, answer_field: st
     NL = chr(10)
     md = ["# autoadapt 人工检查清单（%s）" % suite, "",
           "- 题数：%d | 分桶：%s" % (len(cases), dict(cnt)),
+          "- 金标由规则自动判定（歧义/枚举/是非/年份一律转自由文本，见 gold_rules）；"
+          "无需逐题核对，抽样 10%% 复核即可",
           "- 防污染：本套题目只做观测与对标，不作为 accept 依据", "",
-          "## 需要人工 check 的点", ""]
+          "## 抽样复核清单", ""]
     for r in review_rows:
-        checks = ["分桶是否正确（%s）" % r["bucket"]]
-        if r["bucket"] == "numeric":
-            checks.append("金标数值/单位是否解析正确")
-        if r["bucket"] == "yesno":
-            checks.append("是非方向是否正确")
-        if r["bucket"] == "text":
-            checks.append("是否真的无法自动判（能否改写成数值/是非题）")
-        if hints.get(r["id"]):
-            checks.append("期望行为为 LLM 起草（需人工确认）")
-        md.append("- **%s**：%s；金标：%s" % (r["id"], "；".join(checks), r["gold"]))
+        note = {"numeric": "数值/单位解析", "yesno": "是非方向", "text": "确为自由文本"}.get(
+            r["bucket"], r["bucket"])
+        md.append("- **%s**：分桶 %s（%s）；金标：%s" % (r["id"], r["bucket"], note, r["gold"]))
     review_path = Path(review)
     review_path.parent.mkdir(parents=True, exist_ok=True)
     review_path.write_text(NL.join(md), encoding="utf-8")

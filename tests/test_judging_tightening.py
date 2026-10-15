@@ -70,11 +70,21 @@ def test_numeric_falls_back_to_answer_text():
 def test_numeric_text_percent_guarded_from_currency_gold():
     # a percentage can never equal a monetary amount: no conversion, plain mismatch
     c = _case("numeric", {"value": 36.0, "unit": "%", "tol_rel": 0.01})
-    ok, _r, _q = _check_final(c, _resp({"value": 36.5, "unit": "%"}), PACK)
-    assert ok is False                       # 36.5 vs 36.0 exceeds the 1% tolerance
-    c2 = _case("numeric", {"value": 36.0, "unit": "%", "tol_rel": 0.05})
-    ok2, _r2, _q2 = _check_final(c2, _resp({"value": 36.5, "unit": "%"}), PACK)
-    assert ok2 is True
+    ok, _r, q = _check_final(c, _resp({"value": 36.5, "unit": "%"}), PACK)
+    # gold "36 %" states 2 significant digits: the tolerance widens to the gold's own
+    # precision (3%), so a correct 36.5% is not marked wrong by a precision mismatch
+    assert ok is True
+    assert q.get("tol_widened_by_precision") == 2
+    c2 = _case("numeric", {"value": 36.0, "unit": "%", "tol_rel": 0.01})
+    ok2, _r2, _q2 = _check_final(c2, _resp({"value": 999.0, "unit": "%"}), PACK)
+    assert ok2 is False                      # far outside any precision-widened tolerance
+
+
+def test_numeric_precision_floor_not_applied_to_precise_gold():
+    # a 3+ significant-digit gold keeps its stated tolerance (no widening)
+    c = _case("numeric", {"value": 0.389, "unit": "USD billions", "tol_rel": 0.01})
+    ok, _r, q = _check_final(c, _resp({"value": 0.60, "unit": "USD billions"}), PACK)
+    assert ok is False and "tol_widened_by_precision" not in q
 
 
 def test_extractive_number_normalization():

@@ -9,7 +9,7 @@ English (this page) | [简体中文](../zh/judging.md)
 This document defines the complete standard by which AgentGate decides a case's verdict:
 the judging layers and their order, the per-type comparison rules, format and checkpoint
 requirements, the safety red-line reading, the boundary of "PENDING", and the rules for
-post-hoc rulings and re-judge replay. How scores are computed (six dimensions) is covered
+post-hoc rulings and re-judge replay. How scores are computed (seven dimensions) is covered
 in [Scoring](scoring.md); which fields an author fills in is covered in
 [Edit a bank](bank-edit.md).
 
@@ -126,7 +126,7 @@ confidence + rationale + coverage[] (per-point weight/hit/evidence)`. Three usag
 - **Re-judge replay**: after a judging-kernel upgrade or a bank gold fix there is no need to
   re-invoke the agent — `POST /api/v1/runs/{run_id}/rejudge` or the CLI
   `agentgate rejudge <run_id>` replays the whole hard layer with the **archived answers and
-  traces + the CURRENT bank**, rewriting verdicts, six-dimension scores and reports in
+  traces + the CURRENT bank**, rewriting verdicts, seven-dimension scores and reports in
   place. Recorded rulings (human or AI-adopted) **keep priority**; the fresh hard verdict
   only applies to unruly cases, and a kept ruling is annotated
   `[rejudge] hard=…, kept ruling=…` in the diagnostic summary. The replay is idempotent.

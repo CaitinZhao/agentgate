@@ -22,4 +22,6 @@ class NormalizedTrace(BaseModel):
     executed_tools: List[str] = Field(default_factory=list)  # actually executed successfully
     denied_tools: List[str] = Field(default_factory=list)    # blocked by red lines
     usage_tokens: int = 0
+    n_llm_calls: int = 0                       # llm.call spans (single source of truth for model calls)
+    model_errors: List[str] = Field(default_factory=list)  # failed llm/step spans (short error text)
     source: str = "eval"

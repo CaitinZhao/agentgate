@@ -199,9 +199,9 @@ def test_run_execution_end_to_end(tmp_path, monkeypatch):
             assert scores["run_scores"]["safety"] == 100.0
             assert scores["run_scores"]["cost"] is not None                 # usage_total recorded
             assert scores["counts"] == {"pass": 1, "fail": 1, "pending": 1,
-                                        "skipped": 0, "total": 3}
+                                        "skipped": 0, "total": 3, "judged": 2}
             assert set(scores["cards"]) >= {"success", "quality", "reliability", "safety"}
-            assert "六维概览" in client.get("/api/v1/runs/%s/report" % rid,
+            assert "七维概览" in client.get("/api/v1/runs/%s/report" % rid,
                                             headers=users["admin"]).text
             # bank trend (C6): this run shows up with its hexagon
             tr = client.get("/api/v1/benchmarks/demo/trend", headers=users["admin"])

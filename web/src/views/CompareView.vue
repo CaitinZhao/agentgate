@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Run comparison (doc 35 C6): six-dimension radar overlay + per-dimension Δ table,
+// Run comparison (doc 35 C6): seven-dimension radar overlay + per-dimension Δ table,
 // plus the case-level transfer table from control/compare.
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";

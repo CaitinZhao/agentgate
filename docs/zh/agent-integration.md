@@ -154,7 +154,7 @@ agentgate probe http://127.0.0.1:8200
 
 ## 常见问题
 
-- **全部题目 FAIL，run 状态是 failed，错误是 target unreachable**：被测地址不可达（agent 没起/端口写错）。平台不给分数——这类 run 的六维全是 n/a，修正地址后重跑。
+- **全部题目 FAIL，run 状态是 failed，错误是 target unreachable**：被测地址不可达（agent 没起/端口写错）。平台不给分数——这类 run 的七维全是 n/a，修正地址后重跑。
 - **我的 Agent 没有 /capabilities**：平台按未知 agent 处理（宽松：不跳题），但声明剖面的库会因无法握手而全部 SKIPPED——建议实现该端点。
 - **工具类 checkpoint 全部失分 / 轨迹分析是空的**：Agent 没上报任何工具序列。要么按上面接 OTel（`OTEL_EXPORTER_OTLP_ENDPOINT` 指到平台 :4318），要么在响应 `audit` 里如实报告每次工具调用。`agentgate probe` 的 audit 检查项会提前提示这一点。
 - **每题结果前有几秒固定延迟**：平台在等异步导出的 span。Agent 不上报 OTel 时在

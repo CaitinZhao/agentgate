@@ -1,7 +1,7 @@
 """Evaluation orchestration: start the receiver -> run cases -> judge -> gate -> export reports (observe only, never decide).
 
 Doc 35 wiring: analysis runs BEFORE judging (trajectory signals feed the hard layer);
-each case produces (EvalResult, judge_out); the run writes scores.json (six-dimension
+each case produces (EvalResult, judge_out); the run writes scores.json (seven-dimension
 hexagon + diagnostic cards). Optional per-run enhancements: repeat_k stability
 (pass^k, off by default) and per-user AI config (judge suggestions for free_text —
 suggestions only unless auto-adopt was explicitly enabled — plus the AI report summary).
@@ -190,7 +190,7 @@ def run_case_set(cases_dir, target, out_dir, receiver_port: int = 4318,
                  repeat_k: int = 1, ai_cfg: Dict = None,
                  trace_wait_s: float = 15.0, sandbox_provider=None,
                  sandbox_exec_url: str = None) -> Dict:
-    """Run a set of cases: invoke -> judge -> gate -> six-dimension scores -> bilingual reports.
+    """Run a set of cases: invoke -> judge -> gate -> seven-dimension scores -> bilingual reports.
 
     Case source (first match wins): cases_list (pre-resolved Case objects — the web worker
     passes these after applying overrides/level filters and packing) > cases_file
@@ -249,7 +249,7 @@ def run_case_set(cases_dir, target, out_dir, receiver_port: int = 4318,
     results, runs_meta, raw_spans, model_calls_all, analysis_rows, judge_rows = \
         [], [], [], [], [], []
     answers_rows = []                                # full answers (AI gold-fix on dispute)
-    case_rows = []                                   # six-dimension scorer input
+    case_rows = []                                   # seven-dimension scorer input
     import time as _time
     import os as _os
     proxy_sink = proxy_sink or _os.environ.get("AGENTGATE_PROXY_SINK",
@@ -486,13 +486,20 @@ def run_case_set(cases_dir, target, out_dir, receiver_port: int = 4318,
             for a in answers_rows:
                 fh.write(json.dumps(a, ensure_ascii=False) + "\n")
 
-    # ---- six-dimension scores (doc 35 §2) + gate + meta ----
+    # ---- seven-dimension scores (doc 35 §2) + gate + meta ----
     from ..analysis.scores import score_run, render_section
-    scores = score_run(case_rows)
-    (out / "scores.json").write_text(
-        json.dumps(scores, ensure_ascii=False, indent=1), encoding="utf-8")
     n_target_err = sum(1 for row in case_rows
                        if (row.get("judge_out") or {}).get("target_error"))
+    scores = score_run(case_rows)
+    # artifact self-consistency: a report must never state a fact its own evidence
+    # contradicts — the verdict rides along with the scores and gates accept-eligibility
+    from ..result.consistency import check_summary
+    consistency = check_summary(scores, case_rows, {"target_errors": n_target_err})
+    scores["consistency"] = consistency
+    if not consistency["ok"]:
+        scores["degraded"] = True
+    (out / "scores.json").write_text(
+        json.dumps(scores, ensure_ascii=False, indent=1), encoding="utf-8")
     meta = {"time": datetime.datetime.now().isoformat(timespec="seconds"),
             "target_errors": n_target_err,
             "level_rows": level_rows, "suite_rows": suite_rows,
@@ -502,6 +509,12 @@ def run_case_set(cases_dir, target, out_dir, receiver_port: int = 4318,
             "eval_set_version": (results[0]["eval_set_version"] if results else "example-v0.1"),
             "repeat_k": repeat_k, "scores": scores,
             "ai_used": bool(ai_cfg) or bool(judge_rows)}
+    # the consistency verdict rides in gate.json too: a downstream reader (automation
+    # deciding accept) that only opens gate.json must still see the report is untrusted
+    gate["consistency"] = consistency
+    if consistency.get("degraded"):
+        gate["degraded"] = True
+        gate["decision"] = "DEGRADED — %s" % gate.get("decision", "")
     paths = export_json(str(out), results, runs_meta, gate)
     if analysis_rows:
         # message-level trajectory analysis as archival artifacts (the run-detail tab serves them)

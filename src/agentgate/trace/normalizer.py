@@ -37,13 +37,32 @@ def _tool_name(attrs: Dict, span_name: str) -> str:
 
 
 def _tool_status(kind: str, attrs: Dict) -> str:
-    if kind != "tool":
-        return "ok"
+    """Status of one span. Generic error attributes are honored for EVERY kind — an
+    llm.call that failed must not silently read as "ok" (the failure would vanish from
+    the whole chain: model-error signals, reliability deductions, reports)."""
     status = attrs.get("tool.status")
     if status is not None:
         return str(status)
-    oj = str(attrs.get("openjiuwen.status", "finish"))
-    return "error" if oj not in ("finish", "ok", "success") else "ok"
+    oj = attrs.get("openjiuwen.status")
+    if oj is not None:
+        return "error" if str(oj) not in ("finish", "ok", "success") else "ok"
+    # generic conventions: otel status.code / error flag / a non-empty error message
+    code = attrs.get("otel.status_code") or attrs.get("status.code") or attrs.get("status")
+    if code is not None and str(code).upper() in ("ERROR", "2", "STATUS_CODE_ERROR"):
+        return "error"
+    if attrs.get("error") or attrs.get("exception.message") or attrs.get("exception.type"):
+        return "error"
+    return "ok"
+
+
+def _span_error(attrs: Dict) -> str:
+    """Short error text for a failed span (for the report's model-error line)."""
+    for k in ("exception.message", "error.message", "error", "status.message",
+              "otel.status_description"):
+        v = attrs.get(k)
+        if v:
+            return str(v)[:200]
+    return ""
 
 
 def normalize(spans: List[Dict]) -> NormalizedTrace:
@@ -55,6 +74,8 @@ def normalize(spans: List[Dict]) -> NormalizedTrace:
     denied: List[str] = []
     usage = 0
     model = ""
+    n_llm = 0
+    model_errors: List[str] = []
     for i, s in enumerate(spans):
         attrs = s.get("attributes", {}) or {}
         name = s.get("name", "")
@@ -70,7 +91,10 @@ def normalize(spans: List[Dict]) -> NormalizedTrace:
                 denied.append(tn)
             else:
                 executed.append(tn)
+        if status == "error" and kind in ("llm", "step"):
+            model_errors.append("%s: %s" % (name, _span_error(attrs) or "span status=error"))
         if kind == "llm":
+            n_llm += 1
             usage += int(attrs.get("llm.usage.total_tokens", 0) or 0)
             usage += (int(attrs.get("gen_ai.usage.prompt_tokens", 0) or 0)
                       + int(attrs.get("gen_ai.usage.completion_tokens", 0) or 0))
@@ -90,6 +114,7 @@ def normalize(spans: List[Dict]) -> NormalizedTrace:
         component_versions=str(root.get("component.version", "")),
         steps=steps, tool_calls=tool_calls, executed_tools=executed,
         denied_tools=denied, usage_tokens=usage,
+        n_llm_calls=n_llm, model_errors=model_errors,
         source=str(root.get("source", "eval")),
     )
 

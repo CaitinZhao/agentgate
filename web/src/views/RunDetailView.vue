@@ -16,7 +16,7 @@ const tab = ref<"items" | "report" | "analysis" | "artifacts">("items");
 const reportText = ref("");
 const analysisText = ref("");
 const reportLang = ref<"zh" | "en">(locale.value === "en" ? "en" : "zh");
-const scores = ref<any>(null);          // scores.json (six-dimension hexagon, doc 35)
+const scores = ref<any>(null);          // scores.json (seven-dimension hexagon, doc 35)
 const openCard = ref("");
 let timer: any = null;
 
@@ -274,7 +274,7 @@ function dl(fname: string) {
     </div>
     </div>
 
-    <!-- six-dimension hexagon + diagnostic cards (doc 35 §2/§3/§6) -->
+    <!-- seven-dimension hexagon + diagnostic cards (doc 35 §2/§3/§6) -->
     <div class="card" v-if="done && scores && scores.run_scores">
       <h4 style="margin: 0 0 4px">{{ $t("scores.title") }}</h4>
       <div class="inline" style="align-items: flex-start">

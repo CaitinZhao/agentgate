@@ -96,17 +96,20 @@ def _numbers_in(text: str) -> List[tuple]:
     return out
 
 
-def _extract_boolean(final: Dict, answer_text: str) -> str:
-    """Pull a yes/no stance out of the response: FINAL.value -> FINAL.answer -> conclusion
-    zone of the answer text (last 400 chars, where the conclusion lives). Chinese
-    lexicon and polarity words included; returns "" when no boolean stance is found."""
-    for k in ("value", "answer"):
+def _extract_boolean(final: Dict, answer_text: str):
+    """Pull a yes/no stance out of the response and report WHERE it came from.
+
+    Returns (stance, source) with source in {"value", "answer_field", "final_line",
+    "prose", ""} — the eval protocol treats FINAL.value as authoritative, so a stance
+    recovered from the prose is legitimate but must be labelled: a report reader has to be
+    able to see the verdict did not come from the contract field."""
+    for k, src in (("value", "value"), ("answer", "answer_field")):
         v = final.get(k)
         if v is None or isinstance(v, (dict, list)):
             continue
         tok = re.split(r"[\s，。,.;；:：—\-]", str(v).strip())[0].strip().lower()
         if tok in _YESNO:
-            return _YESNO[tok]
+            return _YESNO[tok], src
     text = str(answer_text or "")
     m = re.search(r"FINAL\s*[:：]\s*(\{.+)", text)
     if m:                                   # a FINAL: {...} line the response contract asks for
@@ -122,17 +125,15 @@ def _extract_boolean(final: Dict, answer_text: str) -> str:
                         end = i + 1
                         break
             blob = json.loads(tail[:end])
-            got = _extract_boolean(blob if isinstance(blob, dict) else {}, "")
+            got, _src = _extract_boolean(blob if isinstance(blob, dict) else {}, "")
             if got:
-                return got
+                return got, "final_line"
         except (ValueError, AttributeError):
             pass
     zone = _NOISE_RE.sub(" ", text[-400:])
-    if _NOT_POSITIVE_RE.search(zone) or _NOT_NEGATIVE_RE.search(zone):
-        pass                               # negated polarity handled by the opposite word below
     zh_no, zh_yes = bool(_ZH_NO_RE.search(zone)), bool(_ZH_YES_RE.search(zone))
     if zh_no != zh_yes:
-        return "no" if zh_no else "yes"
+        return ("no" if zh_no else "yes"), "prose"
     no_hits = len(_BOOL_NO_RE.findall(zone))
     yes_hits = len(_BOOL_YES_RE.findall(zone))
     if _NOT_POSITIVE_RE.search(zone):
@@ -140,14 +141,26 @@ def _extract_boolean(final: Dict, answer_text: str) -> str:
     if _NOT_NEGATIVE_RE.search(zone):
         yes_hits += 1
     if yes_hits and not no_hits:
-        return "yes"
+        return "yes", "prose"
     if no_hits and not yes_hits:
-        return "no"
-    return ""
+        return "no", "prose"
+    return "", ""
 
 
 def _norm_text(s: str) -> str:
     return re.sub(r"[\s,，。.!？?；;:：'\"()\[\]{}]+", "", str(s or "")).lower()
+
+
+def _sig_digits(v) -> int:
+    """Significant digits of a gold value (0.40 -> 2, 0.389 -> 3, 77.78 -> 4). Used as a
+    precision floor for the tolerance: judging tighter than the gold's own precision
+    marks correct answers wrong."""
+    try:
+        s = ("%.10f" % abs(float(v))).rstrip("0")
+    except (TypeError, ValueError):
+        return 0
+    digits = s.replace(".", "").lstrip("0")
+    return len(digits)
 
 
 def _norm_num_text(s: str) -> str:
@@ -225,7 +238,7 @@ def _reference_check(gfinal: Dict, final: Dict, answer: str) -> Optional[bool]:
     if pol is None and len(ref.split()) <= 3:
         pol = _YESNO.get(ref_low)
     if pol is not None:
-        if _extract_boolean(final, answer) != pol:
+        if _extract_boolean(final, answer)[0] != pol:
             return None
     elif ref_nums:
         pass                               # numbers covered -> enough for extraction QA
@@ -363,6 +376,13 @@ def _check_final(case, response, pack: Dict, assets_roots=None,
             if cv is not None:
                 v = cv
         tol = float(gfinal.get("tol_rel", 0.01) or 0)
+        # precision floor: a gold stated to 1-2 significant digits carries at most that
+        # precision (0.40B cannot be judged to 1% against a correct 0.389B) — the
+        # tolerance widens to the precision the gold itself claims, never narrower
+        sig = _sig_digits(gold_v)
+        if sig and sig <= 2 and tol < 0.03:
+            tol = 0.03
+            quality["tol_widened_by_precision"] = sig
         denom = abs(float(gold_v)) or 1.0
         margin = abs(float(v) - float(gold_v)) / denom
         quality["final_margin"] = round(margin / tol, 3) if tol > 0 else (0.0 if margin <= 1e-9 else 9.9)
@@ -390,7 +410,15 @@ def _check_final(case, response, pack: Dict, assets_roots=None,
                 failed_step="final")], quality
         # the stance may sit in FINAL.value, FINAL.answer, or the conclusion of the
         # answer text (numeric evidence in `value` + the verdict in prose is common)
-        got = _extract_boolean(final, answer)
+        got, src = _extract_boolean(final, answer)
+        if src == "prose":
+            # the protocol treats FINAL.value as authoritative: recovering a stance from
+            # the prose is legitimate but must be visible in the report
+            quality["boolean_from_prose"] = True
+            results.append(VerifierResult(ok=True, layer="L1", name="boolean_prose",
+                reason="stance recovered from the answer prose (FINAL carries no yes/no)",
+                asi="判定依据来自回答正文的结论句，而非 FINAL 字段（契约以外的事实来源，已标注）",
+                failed_step="final"))
         if got != want:
             return False, results + [VerifierResult(ok=False, layer="L1", name="boolean",
                 reason="expected %s, got %s" % (want, got or "未明确回答"),

@@ -663,21 +663,21 @@ _ARTIFACT_SUFFIXES = (".md", ".json", ".jsonl")
 
 @router.get("/runs/{run_id}/scores")
 def run_scores(run_id: str, user: dict = Depends(auth.require_min("member"))):
-    """scores.json: the run's six-dimension hexagon + per-case scores + diagnostic cards."""
+    """scores.json: the run's seven-dimension hexagon + per-case scores + diagnostic cards."""
     run = _get_own_or_admin_run(run_id, user)
     if not run["result_dir"]:
         raise HTTPException(404, "scores not ready")
     p = Path(run["result_dir"]) / "scores.json"
     if not p.exists():
         # pre-C1 runs have no scores file — the UI degrades to the plain report
-        raise HTTPException(404, "scores file missing (run predates six-dimension scoring)")
+        raise HTTPException(404, "scores file missing (run predates seven-dimension scoring)")
     return json.loads(p.read_text(encoding="utf-8"))
 
 
 @router.get("/benchmarks/{name}/trend")
 def bank_trend(name: str, user: dict = Depends(auth.require_min("member")),
                limit: int = 20):
-    """Six-dimension trend across this bank's finished runs (doc 35 C6)."""
+    """Seven-dimension trend across this bank's finished runs (doc 35 C6)."""
     bank = db.get_benchmark(name)
     if not bank:
         raise HTTPException(404, "benchmark not found: %s" % name)

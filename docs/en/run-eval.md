@@ -35,7 +35,7 @@ shows PENDING(n)), SKIPPED (environment unmet). A run whose target is unreachabl
 
 After a judging-kernel upgrade or a bank gold fix, use `agentgate rejudge <run_id>` (CLI) or
 `POST /api/v1/runs/{run_id}/rejudge` on a finished run: the whole hard layer is replayed with
-the **archived answers and traces + the CURRENT bank**, rewriting verdicts, six-dimension
+the **archived answers and traces + the CURRENT bank**, rewriting verdicts, seven-dimension
 scores and reports in place. Recorded rulings (human or AI-adopted) keep priority — the fresh
 hard verdict only applies to unruly cases. The replay is idempotent. See
 [Judging standards](judging.md) §9.

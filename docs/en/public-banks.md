@@ -32,7 +32,7 @@ computed, and the contamination conventions. For self-authored banks see
 
 Every run reports two readings of the same data:
 
-1. **Platform reading** (six-dimension radar): this suite's own methodology — success /
+1. **Platform reading** (seven-dimension radar): this suite's own methodology — success /
    quality / reliability / stability / efficiency / cost / safety — uniform across ALL
    banks, comparable bank-to-bank.
 2. **Native reading** (the report's "Native reading" section + the run-detail card): each

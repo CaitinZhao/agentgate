@@ -129,16 +129,17 @@ def write_cases(out_dir: Path = Path("cases/L0")) -> List[Path]:
 
 # ---------------- full integration (150 cases) ----------------
 
-_NUM_RE = __import__("re").compile(r"-?\$?\s*\d[\d,]*(?:\.\d+)?")
+from ..gold_rules import quantity_value
 
 
 def _parse_gold(answer: str, question: str):
-    """Parse (unit, value) from the gold answer; return None when unparseable (the case becomes free_text).
+    """Parse (unit, value) from the gold answer; return None when the answer is not an
+    unambiguous quantity (the case then becomes free_text with a reference answer).
 
-    Regex extraction: prose before the number ("Corporate. Its net revenue was -$473
-    million.") must not break the scan on sentence dots."""
-    a = answer.strip().lstrip("$").replace(",", "")
-    q = question.lower()
+    All quantity-safety rules live in one place (`case/gold_rules.py`) and are shared with
+    `agentgate autoadapt`, so the two paths can never drift apart."""
+    a = str(answer or "").strip().lstrip("$").replace(",", "")
+    q = str(question or "").lower()
     if "billion" in q or "billion" in a:
         unit = "USD billions"
     elif "million" in q or "million" in a:
@@ -147,13 +148,10 @@ def _parse_gold(answer: str, question: str):
         unit = "%"
     else:
         return None
-    m = _NUM_RE.search(a)
-    if not m:
+    v, _reason = quantity_value(a, question)
+    if v is None:
         return None
-    try:
-        return {"unit": unit, "value": float(m.group(0).replace(",", "").replace("$", ""))}
-    except ValueError:
-        return None
+    return {"unit": unit, "value": v}
 
 
 def _parse_yesno(answer: str):

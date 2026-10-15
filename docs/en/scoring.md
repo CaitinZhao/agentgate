@@ -4,7 +4,7 @@ English（this page） | [简体中文](../zh/scoring.md)
 
 </div>
 
-# Scoring: gold v2 + six dimensions
+# Scoring: gold v2 + seven dimensions
 
 What the author puts into gold v2 and the per-dimension rules. How a case is decided
 (judging layers, per-type rules, red lines, the PENDING boundary, re-judge replay) has its
@@ -32,7 +32,7 @@ not a failure), the final gate once every ruling is in.
 Case type is inferred from the gold shape when left `auto`. Examples: [Edit a bank](bank-edit.md);
 pack-level defaults: [Create a bank](bank-create.md).
 
-## Six dimensions
+## Seven dimensions
 
 | Dimension | Weight | Rule |
 |---|---|---|

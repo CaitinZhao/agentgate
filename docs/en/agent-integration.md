@@ -119,7 +119,7 @@ Deployment questions: [Deployment](deployment.md); judging rules: [Scoring](scor
 ## 6) FAQ
 
 - **All cases FAIL, run status failed, "target unreachable"**: the target address is
-  unreachable (agent down / wrong port). The platform gives no scores — all six dimensions
+  unreachable (agent down / wrong port). The platform gives no scores — all seven dimensions
   are n/a; fix the address and re-run.
 - **My agent has no /capabilities**: treated as an unknown agent (permissive: no skips), but
   banks requiring a profile cannot handshake and get SKIPPED — implement the endpoint.

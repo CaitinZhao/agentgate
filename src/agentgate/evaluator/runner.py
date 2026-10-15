@@ -1,6 +1,6 @@
 """Judged-case assembly: hard-layer judging (judging.py) -> EvalResult contract.
 
-Returns (EvalResult, judge_out) — the six-dimension scorer consumes judge_out
+Returns (EvalResult, judge_out) — the seven-dimension scorer consumes judge_out
 (safety/checkpoints/process signals). Soft judge (LLM) suggestions and human review
 attach afterwards in the service; this module stays deterministic (hard checks only).
 """

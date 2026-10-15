@@ -1,7 +1,7 @@
 """Native (dataset-original) reading for public benchmarks — the dual-score convention.
 
 Every public benchmark bank gets TWO readings of the same run:
-  platform reading — the six-dimension hexagon (this suite's methodology, weights and
+  platform reading — the seven-dimension hexagon (this suite's methodology, weights and
                      honesty rules; comparable across ALL banks);
   native reading   — the original benchmark's metric under its original rules, so numbers
                      stay comparable with papers / the original harness (doc 35 §2 双口径).
@@ -491,7 +491,12 @@ def compute_native(case, response, trace, pack: Dict, search_roots=None,
 
 
 def aggregate_native(case_rows: List[Dict]) -> Dict:
-    """Group per-case native results by suite -> the run's native reading block."""
+    """Group per-case native results by suite -> the run's native reading block.
+
+    Evidence guard: a rate is only emitted for cases actually RESOLVED (`pass` known).
+    Announcing "attack success rate 0.0" over undecided (PENDING) cases fabricates a
+    reading — undecided counts are reported and the rate is withheld.
+    """
     by_suite: Dict[str, List[Dict]] = {}
     for row in case_rows:
         nat = row.get("native")
@@ -502,8 +507,19 @@ def aggregate_native(case_rows: List[Dict]) -> Dict:
     for suite, rows in sorted(by_suite.items()):
         family = rows[0].get("family", "generic")
         total = len(rows)
+        # generic banks derive pass from the platform verdict (resolved by construction)
+        if family == "generic":
+            resolved = [r for r in rows if r.get("typed_pass") is not None]
+        else:
+            resolved = [r for r in rows if r.get("pass") is not None]
+        n_undecided = total - len(resolved)
         entry: Dict = {"family": family,
-                       "label": FAMILY_LABELS.get(family, FAMILY_LABELS["generic"])[0]}
+                       "label": FAMILY_LABELS.get(family, FAMILY_LABELS["generic"])[0],
+                       "resolved": len(resolved)}
+        if n_undecided:
+            entry["undecided"] = n_undecided
+            entry["note"] = ("%d/%d cases undecided (PENDING) — rate withheld"
+                             % (n_undecided, total))
         if family == "generic":
             # typed cases: platform hard verdict == native reading; free_text pending rows
             # count a judge PASS suggestion as native pass (legacy behavior, per suite now)
@@ -531,8 +547,11 @@ def aggregate_native(case_rows: List[Dict]) -> Dict:
                               "security_rate": round(100.0 * sum(1 for v in secs if v is not False) /
                                                      len(secs), 1) if secs else None}})
         else:
-            n_pass = sum(1 for r in rows if r.get("pass") is True)
+            # rate families (harmbench ASR, bfcl/spider/gaia pass rates): over RESOLVED
+            # cases only; no resolved case -> no rate, never a fabricated 0.0
+            n_pass = sum(1 for r in resolved if r.get("pass") is True)
             entry.update({"pass": n_pass, "total": total,
-                          "rate": round(100.0 * n_pass / total, 1) if total else None})
+                          "rate": (round(100.0 * n_pass / len(resolved), 1)
+                                   if resolved else None)})
         out[suite] = entry
     return out

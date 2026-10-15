@@ -90,7 +90,7 @@ A real run of the 10 cases (4 pass, 5 fail, 1 pending; total 68.9):
   offer "✨ AI fix gold"; PENDING rows open the same dialog with the arbitration panel
   ("✨ AI judge" per case, "✨ Batch AI judge" for all — batch runs as a background job with polled progress).
 - The **Report tab** renders the bilingual statistics report — **AI summary first**, then
-  failure-attribution distribution, six-dimension overview, native reading, token summary
+  failure-attribution distribution, seven-dimension overview, native reading, token summary
   (per-case details live in the items tab, not in the report):
 
 ![Report](../images/en/08-run-report.png)

@@ -182,9 +182,27 @@ def rejudge_run(run: dict) -> dict:
             quality_override[row["case_id"]] = cov[row["case_id"]]
     gate = evaluate_gate(results)
     scores = score_run(case_rows, quality_override=quality_override or None)
+    # the same artifact self-consistency verdict the live run produces — a replayed run
+    # must not be trusted more than a fresh one
+    from ..result.consistency import check_summary
+    consistency = check_summary(scores, case_rows,
+                                {"target_errors": (scores or {}).get("target_errors") or 0})
+    scores["consistency"] = consistency
+    if not consistency["ok"]:
+        scores["degraded"] = True
+    gate["consistency"] = consistency
+    if consistency.get("degraded"):
+        gate["degraded"] = True
+        gate["decision"] = "DEGRADED — %s" % gate.get("decision", "")
     export_json(str(rd), results, runs_meta, gate)
     (rd / "scores.json").write_text(json.dumps(scores, ensure_ascii=False, indent=1),
                                     encoding="utf-8")
+
+    # ---- re-render the trajectory analysis from the archived evidence ----
+    # A replay recomputes judging; the trajectory analysis is derived from the same
+    # archived spans, so it must be recomputed too — otherwise analysis.md keeps the OLD
+    # (possibly wrong) facts ("模型 0 次") and the report still contradicts its evidence.
+    _rebuild_analysis(rd, answers, spans, mcalls, cases, roots)
 
     # ---- db: items + run row ----
     verdict_by_id = {r["case_id"]: r["verdict"] for r in case_rows}
@@ -202,6 +220,42 @@ def rejudge_run(run: dict) -> dict:
     return {"rejudged": n_judged, "total_items": len(items),
             "changes": changes, "counts": counts, "scores": scores,
             "quality_overridden": len(quality_override)}
+
+
+def _rebuild_analysis(rd, answers, spans, mcalls, cases, roots):
+    """Recompute analysis.md/-en.md from the archived evidence (best-effort).
+
+    The analysis is derived from spans + answers alone, so a replay can (and must) refresh
+    it: leaving the old file in place is exactly how a report ends up stating facts its own
+    evidence contradicts."""
+    try:
+        from ..analysis.trajectory import analyze_case, render_section
+        from ..trace.normalizer import normalize
+        rows = []
+        for cid in answers:
+            case = cases.get(cid)
+            if case is None:
+                continue
+            a = answers[cid]
+            response = {"answer_text": a.get("answer_text", ""),
+                        "final_json": a.get("final_json") or {}}
+            calls = mcalls.get(cid) or []
+            try:
+                analysis = analyze_case(case, response, normalize(spans.get(cid) or []), calls)
+            except Exception:
+                continue
+            rows.append({"case_id": cid, "analysis": analysis})
+        if not rows:
+            return
+        texts = {"zh": ["# 轨迹分析", ""], "en": ["# Trajectory Analysis", ""]}
+        for row in rows:
+            for lang in ("zh", "en"):
+                texts[lang].extend(render_section(row["case_id"], row["analysis"], lang=lang))
+                texts[lang].append("")
+        (Path(rd) / "analysis.md").write_text("\n".join(texts["zh"]), encoding="utf-8")
+        (Path(rd) / "analysis-en.md").write_text("\n".join(texts["en"]), encoding="utf-8")
+    except Exception:
+        pass
 
 
 def _search_roots(items, cases):

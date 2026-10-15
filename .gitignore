@@ -64,3 +64,4 @@ cases/cases.db
 Thumbs.db
 *.swp
 deploy/.last_host
+cases/example/cases.db

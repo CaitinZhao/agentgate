@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Six-dimension radar (doc 35 §2): SVG, no deps. Draws one or two polygons (compare mode).
+// Seven-dimension radar (doc 35 §2): SVG, no deps. Draws one or two polygons (compare mode).
 // Dimensions without data (null) show "n/a" and BREAK the polygon at that axis — no fake
 // zero, no misleading chord across the missing dimension. Null axes carry a REASON
 // (naReasons: "target returned no usage data" / "repeat off" / "pending cases") as a

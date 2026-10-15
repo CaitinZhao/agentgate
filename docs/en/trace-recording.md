@@ -26,7 +26,7 @@ authoritative — no double counting. Field format: [Agent integration](agent-in
 
 Switches: ① always on (resident receiver; one env var on the agent side). ② on by default —
 the platform delivers the proxy URL per call via /invoke's `llm_base_url`; the agent sends its
-LLM traffic there. Without it: span-level degradation, cost dimension n/a.
+LLM traffic there. Without it, counting facts (model calls, tool sequence, tokens, model errors) still come from the spans — the agent's actions have one source of truth; the proxy only adds message-level detail (tool args, request history, injection-follow detection). The cost dimension shows n/a and loop detection narrows to tool names, noted in the report.
 
 Agent-side summary: `OTEL_EXPORTER_OTLP_ENDPOINT=http://<platform>:4318`; no secrets needed
 for ② (the URL arrives per call). Full contract: [Agent integration](agent-integration.md).

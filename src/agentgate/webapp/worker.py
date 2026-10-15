@@ -338,10 +338,12 @@ class Worker(threading.Thread):
                           error="target unreachable: %d cases failed to invoke "
                                 "(check the target agent's address/health)" % n_err)
             return
+        sc = summary.get("scores") or {}
+        # the gate already carries the consistency verdict (service prefixes DEGRADED)
+        decision = summary["gate"].get("decision", "")
         db.update_run(rid, status=status, finished_at=db.now(),
-                      gate_decision=summary["gate"]["decision"],
-                      score=(str(summary["scores"].get("total"))
-                             if summary.get("scores", {}).get("total") is not None
+                      gate_decision=decision,
+                      score=(str(sc.get("total")) if sc.get("total") is not None
                              else str(summary["gate"].get("score", ""))),
                       result_dir=str(out_dir))
         # A4 auto terminal AI judging: the creator opted into auto-adoption -> the

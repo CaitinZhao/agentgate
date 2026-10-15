@@ -234,7 +234,7 @@ docker run -d --name agentgate-web --network host -v /opt/agentgate-platform/dat
 | Agent 容器日志 | `docker logs jiuwen-agent` | uvicorn 访问日志、Agent 侧报错 | `POST /invoke HTTP/1.1" 200 OK` |
 | 单次 run 失败原因 | Web 执行详情页红色 error 框（即 runs 表 error 字段） | 直接原因，如 `FileNotFoundError("context_file not resolvable...")` | 成功的 run 不出现 |
 | 每次模型调用的留痕 | 数据卷 `llm_proxy_sink/current.jsonl` | 一行一条 JSON：ts/model/request/response/usage | 勾选消息级录制的 run 才有 |
-| 单次 run 的完整产物 | 数据卷 `results/<run_id>/` | report.md（六维+诊断）、scores.json、judge.jsonl、spans_raw.json | 执行详情页"工件"页签可下载 |
+| 单次 run 的完整产物 | 数据卷 `results/<run_id>/` | report.md（七维+诊断）、scores.json、judge.jsonl、spans_raw.json | 执行详情页"工件"页签可下载 |
 
 常用命令：`docker ps`（两容器 Up）、`docker compose logs -f agentgate`、
 `docker restart agentgate-web`、`curl -s http://127.0.0.1:8030/api/v1/health`。

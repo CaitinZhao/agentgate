@@ -7,7 +7,7 @@ English（this page） | [简体中文](../zh/developing.md)
 # Testing Guide (developers)
 
 Layers: unit/pipeline tests (`python -m pytest tests/ -q --ignore=tests/test_jiuwen_agent.py`
-**from the agentgate/ directory** — judging pipeline, six-dimension scorer, gold v2, Web API
+**from the agentgate/ directory** — judging pipeline, seven-dimension scorer, gold v2, Web API
 end-to-end via TestClient + MockTarget, Excel round-trip); offline smoke (`agentgate smoke` —
 no network, no LLM: scripted answers + spans -> judge -> gate); real-chain smoke
 (`deploy/smoke_jiuwen.py` against the running container); visual review (`deploy/review_ui.py`

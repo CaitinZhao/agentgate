@@ -37,7 +37,7 @@
        ② 录制代理 :8300  消息级 LLM 调用记录
   → 判定管线（红线 → 格式/schema → 题型终答 → 参考答案救援 → 检查点 → 过程信号）
   → 事后层：AI judge 建议/自动终判（安全库只自动采纳 FAIL）→ 人工终裁 → 重判回放
-  → 六维评分（scores.json）+ 双语诊断报告（report.md / report-en.md）
+  → 七维评分（scores.json）+ 双语诊断报告（report.md / report-en.md）
   → 门禁（GREEN / FAIL / PENDING(n)）+ 产物归档（data/results/<run_id>/）
 ```
 
@@ -48,7 +48,7 @@ agentgate/
 ├── src/agentgate/
 │   ├── case/          # 题库模型（gold v2）、SQLite 存储、Excel 往返、领域包注册表
 │   ├── evaluator/     # 判定管线（红线/格式/题型终答/检查点）与 EvalResult 组装
-│   ├── analysis/      # 轨迹信号（跳步/循环/断链/注入）、六维计分器、AI 客户端
+│   ├── analysis/      # 轨迹信号（跳步/循环/断链/注入）、七维计分器、AI 客户端
 │   ├── control/       # 评测编排：run_case_set（发起→判定→评分→报告）
 │   ├── run/           # 目标 Agent 的 HTTP 调用与 span 归一化
 │   ├── trace/         # OTLP 接收器、消息级录制代理、span 归一化
@@ -71,7 +71,7 @@ agent-contracts/       # 轨迹/评测结果的共享 schema 契约包（平台�
 |---|---|---|
 | 轨迹录制 | [trace-recording.md](trace-recording.md) | 两条观测通道各自看什么、为什么都要有 |
 | 判题标准 | [judging.md](judging.md) | 判定层顺序、题型判定规则、红线口径、待判边界、重判回放 |
-| 评分规则 | [scoring.md](scoring.md) | gold v2 字段、六维计分口径、原生读数 |
+| 评分规则 | [scoring.md](scoring.md) | gold v2 字段、七维计分口径、原生读数 |
 | 沙箱执行 | [sandbox.md](sandbox.md) | 被测 Agent 的运行形态、隔离边界与路线图 |
 | AI 辅助 | [ai-assist.md](ai-assist.md) | 平台自己的 LLM 用在哪、怎么配、边界在哪 |
 | 诊断报告 | [diagnostic-report.md](diagnostic-report.md) | 一份 run 产出哪些报告与产物、怎么读 |

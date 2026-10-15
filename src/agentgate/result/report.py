@@ -50,7 +50,15 @@ def build_report(results: List[Dict], gate: Dict, meta: Dict, lang: str = "zh") 
                                 parens % ("%d %s" % (len(results), t["cases"]))))
     lines.append("- %s%s**%s**%s" % (t["gate"], colon, gate["decision"],
                  ("，%s %d" % (t["fails"], len(gate["failures"]))) if gate["failures"] else ""))
-    lines.append("- %s%s%s%s" % (t["score"], colon, gate.get("score", "n/a"), parens % t["score_note"]))
+    n_target_err_hdr = int((meta.get("scores") or {}).get("target_errors") or 0)
+    if n_target_err_hdr and n_target_err_hdr >= len(results):
+        # environment failure: the agent was never reached — a "0/N" here would be read
+        # as the agent's score (attribution must never blame the target for a broken env)
+        lines.append("- %s%s%s" % (t["score"], colon,
+                     ("环境故障，未评测（0 题有效）" if zh else
+                      "environment failure — not evaluated (0 valid cases)")))
+    else:
+        lines.append("- %s%s%s%s" % (t["score"], colon, gate.get("score", "n/a"), parens % t["score_note"]))
     lines.append("")
     if meta.get("ai_summary"):                      # AI summary up front (user request)
         lines.append(("## AI 摘要与改进建议（%s 起草，供参考）" % meta.get("ai_model", "LLM"))
@@ -104,6 +112,16 @@ def build_report(results: List[Dict], gate: Dict, meta: Dict, lang: str = "zh") 
         lines.append("")
     scores = meta.get("scores")
     if scores:
+        cons = scores.get("consistency") or {}
+        if cons.get("degraded"):
+            lines.append("## %s" % ("⚠ 产物一致性校验未通过" if zh else "⚠ Artifact consistency check FAILED"))
+            lines.append("")
+            lines.append("- %s" % ("本次报告与存档证据存在矛盾，结论**不可作为发布判据**：" if zh else
+                                   "This report contradicts its own archived evidence; it must NOT gate release:"))
+            for f in cons.get("findings") or []:
+                if f.get("severity") == "error":
+                    lines.append("  - `%s` %s" % (f.get("code"), f.get("detail")))
+            lines.append("")
         from ..analysis.scores import render_section as render_scores
         lines.extend(render_scores(scores, lang=lang))
         nat = scores.get("native") or {}
@@ -114,7 +132,18 @@ def build_report(results: List[Dict], gate: Dict, meta: Dict, lang: str = "zh") 
             lines.append("|---|---|---|")
             for sv, v in nat.items():
                 rate = v.get("rate")
+                if rate is None and v.get("resolved") == 0 and v.get("total"):
+                    # the reading exists but had no resolved case: say so — a printed 0
+                    # would read as a measured "zero attacks succeeded"
+                    extra = ("（%d 题未判定，证据不足）" % v.get("total") if zh else
+                             " (%d cases undecided — evidence insufficient)" % v.get("total"))
+                    lines.append("| %s | %s | %s%s |" % (sv, v.get("label", ""),
+                                                         "未出读数" if zh else "withheld", extra))
+                    continue
                 extra = " (%s/%s)" % (v.get("pass"), v.get("total"))
+                if v.get("undecided"):
+                    extra += ("，另 %d 题未判定" % v["undecided"] if zh
+                              else ", %d undecided" % v["undecided"])
                 lines.append("| %s | %s | %s%s |" % (sv, v.get("label", ""), rate if rate is not None else "n/a", extra))
             lines.append("")
         tok = scores.get("token_summary") or {}

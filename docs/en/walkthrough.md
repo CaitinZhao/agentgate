@@ -198,11 +198,11 @@ How to read it:
 
 - **Verdicts**: `hello-cap-city` and `hello-math` FAIL — the echo bot only repeats the
   question, and deterministic judging never invents points.
-- **Six dimensions & radar**: reliability 100 (responded normally every time), safety
+- **Seven dimensions & radar**: reliability 100 (responded normally every time), safety
   100 (no red line), efficiency 92 (fast), success 0 (nothing answered). The total is
   dragged down by success — six separated dimensions make an "alive but useless" agent
   instantly visible.
-- **Report tab**: the statistics-first baseline report (gate decision, six dimensions,
+- **Report tab**: the statistics-first baseline report (gate decision, seven dimensions,
   failure attribution, token summary):
 
 ![Baseline report](../images/walkthrough/11-report.png)
@@ -314,7 +314,7 @@ can be judged individually with "✨ AI 判".
 ## Next steps
 
 - Full OTel tracing for your agent: [Trace recording](trace-recording.md)
-- Judging layers and the six-dimension model: [Scoring](scoring.md)
+- Judging layers and the seven-dimension model: [Scoring](scoring.md)
 - The complete invoke contract and FAQ: [Agent integration](agent-integration.md)
 - Deploy for a team: [Deployment](deployment.md)
 - Import public benchmarks in bulk (BFCL / GAIA / Spider…): [Public banks](public-banks.md)

@@ -13,7 +13,7 @@
 
 | 层 | 位置 | 跑法 | 覆盖什么 |
 |---|---|---|---|
-| 单元/管线测试 | `tests/` | `python -m pytest tests/ -q --ignore=tests/test_jiuwen_agent.py`（**在 agentgate/ 目录下跑**） | 判定管线（题型路由/红线/检查点）、六维计分、gold v2、Web API 全链路（TestClient + MockTarget）、Excel 往返、上下文展开 |
+| 单元/管线测试 | `tests/` | `python -m pytest tests/ -q --ignore=tests/test_jiuwen_agent.py`（**在 agentgate/ 目录下跑**） | 判定管线（题型路由/红线/检查点）、七维计分、gold v2、Web API 全链路（TestClient + MockTarget）、Excel 往返、上下文展开 |
 | 离线冒烟 | `agentgate smoke` CLI | 无网络、无 LLM：脚本化答复+spans → 判定 → 门禁 | 端到端核心流（run→judge→gate） |
 | 真实链路冒烟 | `deploy/smoke_jiuwen.py` | 对着真容器跑 | /invoke 契约、剖面、轨迹上报 |
 | 视觉审查 | `deploy/review_ui.py` | 截图喂给视觉模型逐页挑错 | UI 布局/文案/可读性 |
@@ -42,7 +42,7 @@ python -m pytest tests/test_webapp.py -q                         # 只跑 Web AP
 | 要改的东西 | 先看/要补的测试 |
 |---|---|
 | 判定规则（red line / 题型 / 检查点） | `tests/test_doc35.py::test_judging_by_type` |
-| 六维口径（权重/档位/封顶） | `tests/test_doc35.py::test_scores_units` |
+| 七维口径（权重/档位/封顶） | `tests/test_doc35.py::test_scores_units` |
 | Web API（角色/题库/run 生命周期） | `tests/test_webapp.py`（auth matrix / run e2e / SKIPPED 契约） |
 | AI 增强（judge/摘要/起草） | `tests/test_doc35.py::test_ai_settings_and_pack_endpoints`（AI 端点用假配置，不发真请求） |
 | 稳定性 repeat_k | `tests/test_doc35.py::test_stability_repeat_k` |
@@ -54,4 +54,4 @@ python -m pytest tests/test_webapp.py -q                         # 只跑 Web AP
 - 判定/计分类改动必须有单测（构造输入断言输出，跑在秒级）。
 - 涉及 `/invoke` 契约、span 约定、领域包结构的改动：同步改样例 Agent 夹具与
   `agent-contracts` schema，并跑 `tests/test_imports.py` 与契约校验。
-- 双语报告/界面的改动：zh/en 两侧都要有断言（现有测试对报告做文本包含检查，如"六维概览"）。
+- 双语报告/界面的改动：zh/en 两侧都要有断言（现有测试对报告做文本包含检查，如"七维概览"）。

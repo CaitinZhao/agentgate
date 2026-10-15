@@ -39,7 +39,7 @@ Banks (banks/*/cases.db, gold v2)
        (2) recording proxy :8300   message-level LLM records
   -> Judging pipeline (red lines -> format/schema -> typed final -> reference rescue -> checkpoints -> process signals)
   -> Post-run layers: AI judge suggestions / auto-adoption (safety banks only adopt FAIL) -> human rulings -> re-judge replay
-  -> Six-dimension scores (scores.json) + bilingual reports
+  -> Seven-dimension scores (scores.json) + bilingual reports
   -> Gate (GREEN / FAIL / PENDING(n)) + artifacts (data/results/<run_id>/)
 ```
 
@@ -65,7 +65,7 @@ agent-contracts/       # shared schema package for traces / eval results
 |---|---|---|
 | Trace recording | [trace-recording.md](trace-recording.md) | what each observation channel sees, why both exist |
 | Judging standards | [judging.md](judging.md) | judging layers, per-type rules, red lines, the PENDING boundary, re-judge replay |
-| Scoring | [scoring.md](scoring.md) | gold v2, six-dimension rules, the native reading |
+| Scoring | [scoring.md](scoring.md) | gold v2, seven-dimension rules, the native reading |
 | Sandbox | [sandbox.md](sandbox.md) | where the agent runs; isolation boundary & roadmap |
 | AI assist | [ai-assist.md](ai-assist.md) | what the platform's own LLM does, config, boundaries |
 | Diagnostic report | [diagnostic-report.md](diagnostic-report.md) | reports and artifacts of one run, how to read them |

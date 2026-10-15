@@ -29,10 +29,13 @@ class SubprocessHandle(SandboxHandle):
         # POSIX semantics to match the docker provider (cat/test/heredocs); bash is
         # expected on dev machines (Git Bash / WSL). Relative paths resolve against
         # the workdir — absolute paths are the docker provider's domain.
-        shell = _bash_path()
+        shell = _bash_path() if bash_usable() else None
         args = [shell, "-c", cmd] if shell else cmd
+        # an explicit utf-8 decode: without it a Windows console (GBK) crashes the reader
+        # thread on non-ASCII output, and the case fails for an encoding reason, not a
+        # behavioral one. errors="replace" keeps the verdict about the AGENT, not the OS.
         r = subprocess.run(args, shell=not shell, cwd=self.workdir, capture_output=True,
-                           text=True, timeout=timeout)
+                           text=True, encoding="utf-8", errors="replace", timeout=timeout)
         return {"exit_code": r.returncode, "stdout": r.stdout, "stderr": r.stderr}
 
     def write_file(self, path: str, content: str) -> None:
@@ -55,6 +58,30 @@ class SubprocessHandle(SandboxHandle):
 
 def _bash_path():
     return shutil.which("bash") or shutil.which("sh")
+
+
+_BASH_USABLE = None
+
+
+def bash_usable() -> bool:
+    """Whether the resolved shell can actually RUN a command.
+
+    On Windows `shutil.which("bash")` resolves C:\\Windows\\system32\\bash.exe (the WSL
+    launcher); with WSL not installed it exists but fails with E_ACCESSDENIED. Resolving
+    is not the same as working, so probe once with `true` and cache the answer."""
+    global _BASH_USABLE
+    if _BASH_USABLE is None:
+        shell = _bash_path()
+        if not shell:
+            _BASH_USABLE = False
+        else:
+            try:
+                r = subprocess.run([shell, "-c", "true"], capture_output=True,
+                                   text=True, encoding="utf-8", errors="replace", timeout=10)
+                _BASH_USABLE = r.returncode == 0
+            except Exception:
+                _BASH_USABLE = False
+    return _BASH_USABLE
 
 
 class SubprocessSandboxProvider(SandboxProvider):

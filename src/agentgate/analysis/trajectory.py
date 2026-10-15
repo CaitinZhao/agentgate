@@ -60,7 +60,9 @@ def risk_of_tool(name: str) -> Dict:
     return {"class": "other", "level": "medium"}
 
 
-def _norm_args(args: dict) -> str:
+def _norm_args(args) -> str:
+    if args is None:
+        return ""                      # unavailable params: empty, never a fake "{}"
     try:
         return json.dumps(args, sort_keys=True, ensure_ascii=False)
     except (TypeError, ValueError):
@@ -94,6 +96,46 @@ def _tool_results_from_model_calls(model_calls: List[Dict]) -> List[Dict]:
     return out
 
 
+def _detect_loops(tool_seq: List[Dict], args_available: bool) -> List[Dict]:
+    """Loop signals with an HONEST criterion and wording.
+
+    - consecutive same-tool runs of >= 3 are the real loop signal (retrying without
+      progress); disjoint same-tool calls scattered through the trajectory are reported
+      separately as "repeated", never as "consecutive".
+    - when tool arguments are unavailable (OTel spans do not carry them), the match is
+      by tool name ONLY and the record says so (same_args=False) — the report must not
+      claim "with the same arguments" without data.
+    """
+    loops: List[Dict] = []
+    if not tool_seq:
+        return loops
+    # consecutive runs
+    run_start, run_len = 0, 1
+    for i in range(1, len(tool_seq) + 1):
+        same = (i < len(tool_seq) and tool_seq[i]["name"] == tool_seq[run_start]["name"]
+                and (not args_available
+                     or _norm_args(tool_seq[i]["args"]) == _norm_args(tool_seq[run_start]["args"])))
+        if same:
+            run_len += 1
+            continue
+        if run_len >= 3:
+            loops.append({"tool": tool_seq[run_start]["name"],
+                          "count": run_len, "consecutive": True,
+                          "same_args": args_available,
+                          "args": (_norm_args(tool_seq[run_start]["args"])[:160]
+                                   if args_available else "")})
+        run_start, run_len = i, 1
+    # cumulative repeats not already covered by a consecutive run
+    counted = {lp["tool"] for lp in loops}
+    for name, cnt in Counter(t["name"] for t in tool_seq).items():
+        if cnt >= 3 and name not in counted:
+            loops.append({"tool": name, "count": cnt, "consecutive": False,
+                          "same_args": args_available,
+                          "args": (_norm_args(next(t for t in tool_seq if t["name"] == name)["args"])[:160]
+                                   if args_available else "")})
+    return sorted(loops, key=lambda x: (-x["count"], x["tool"]))
+
+
 def _detect_payloads(text: str) -> List[Dict]:
     hits = []
     for pat in _INJECTION_PATTERNS:
@@ -104,32 +146,63 @@ def _detect_payloads(text: str) -> List[Dict]:
 
 
 def analyze_case(case, response: dict, trace, model_calls: List[Dict]) -> Dict:
-    """Analyze one case. model_calls = llm-proxy records (collected by time window; may be empty)."""
-    tool_seq = _tool_calls_from_model_calls(model_calls) if model_calls else [
-        {"seq": i, "name": n, "args": {}} for i, n in enumerate(trace.executed_tools)]
+    """Analyze one case.
+
+    Fact provenance (single source of truth): the normalized TRACE supplies the counts
+    (model calls / tool calls / tokens / errors) — what the agent actually did must be
+    reported the same way everywhere, whatever the recording channel. Message-level
+    proxy records only ENRICH (tool arguments, request history, injection detection);
+    a run without the proxy still reports honest model-call counts instead of zeros.
+    """
+    # tool sequence: proxy gives arguments; the trace is the fallback AND the authority
+    # on ordering. `args` stays None when unavailable — never a fabricated "{}".
+    proxy_seq = _tool_calls_from_model_calls(model_calls) if model_calls else []
+    if proxy_seq:
+        tool_seq = proxy_seq
+        args_available = True
+    else:
+        tool_seq = [{"seq": i, "name": n, "args": None} for i, n in enumerate(trace.executed_tools)]
+        args_available = False
+    n_llm = trace.n_llm_calls or len(model_calls)
+    proxy_tokens = sum(
+        ((mc.get("response") or {}).get("usage") or {}).get("total_tokens", 0) or 0
+        for mc in model_calls)
     out: Dict = {
-        "has_model_calls": bool(model_calls),
-        "n_model_calls": len(model_calls),
+        "has_model_calls": bool(n_llm),
+        "n_model_calls": n_llm,
         "n_tool_calls": len(tool_seq),
-        "usage_tokens": sum(
-            ((mc.get("response") or {}).get("usage") or {}).get("total_tokens", 0) or 0
-            for mc in model_calls),
+        "args_available": args_available,
+        "usage_tokens": proxy_tokens or trace.usage_tokens,
     }
     errors = [mc for mc in model_calls if mc.get("error")]
-    out["model_errors"] = len(errors)
+    # the trace is the single source of truth for failures too: a proxy error record and
+    # the matching span are the SAME failure — counting both would double-charge the
+    # reliability dimension (-10 becoming -20). Trace errors are authoritative; proxy
+    # errors only fill in when the trace recorded nothing (no OTel export for that call).
+    trace_errs = list(trace.model_errors)
+    proxy_errs = [str(e.get("error"))[:160] for e in errors]
+    if trace_errs:
+        out["model_errors"] = len(trace_errs)
+        out["model_error_detail"] = (trace_errs + proxy_errs)[:5]
+        out["model_error_source"] = "trace"
+    else:
+        out["model_errors"] = len(proxy_errs)
+        out["model_error_detail"] = proxy_errs[:5]
+        out["model_error_source"] = "proxy" if proxy_errs else "-"
 
     # --- 1) long-horizon profile + loop detection ---
     distinct = sorted({t["name"] for t in tool_seq})
     risk_hist = Counter()
     for t in tool_seq:
         risk_hist[risk_of_tool(t["name"])["level"]] += 1
-    seen = Counter((_t["name"], _norm_args(_t["args"])) for _t in tool_seq)
-    loops = [{"tool": k[0], "args": k[1][:160], "count": v}
-             for k, v in seen.items() if v >= 3]
     out["horizon"] = {
         "distinct_tools": distinct, "risk_levels": dict(risk_hist),
-        "loops": loops, "repeat_ratio": round(
-            1 - len(seen) / len(tool_seq), 3) if tool_seq else 0.0,
+        "loops": _detect_loops(tool_seq, args_available),
+        "dominant_tools": [n for n, c in Counter(t["name"] for t in tool_seq).most_common(3)
+                           if c >= 3 and args_available is False],
+        "repeat_ratio": round(
+            1 - len({(_t["name"], _norm_args(_t["args"])) for _t in tool_seq})
+            / len(tool_seq), 3) if tool_seq else 0.0,
     }
 
     # --- 2) dangerous-operation inventory ---
@@ -227,12 +300,27 @@ def render_section(case_id: str, a: Dict, lang: str = "zh") -> List[str]:
             did += ("；工具序列：" if zh else "; sequence: ") + " → ".join(seq[:8])
         lines.append("- " + did + "。")
     for lp in (h.get("loops") or [])[:3]:
+        # wording follows the actual criterion: consecutive vs cumulative, and whether
+        # tool arguments were available at all (never claim "same args" without them)
         if zh:
-            lines.append("- ⚠ 疑似循环：工具 %s 以相同参数连续调用 %s 次——通常说明没拿到结果就在重试。"
-                         % (lp.get("tool"), lp.get("count")))
+            if lp.get("consecutive"):
+                detail = ("以相同参数" if lp.get("same_args") else "（参数未记录，按工具名判定）")
+                lines.append("- ⚠ 疑似循环：工具 %s %s连续调用 %s 次——通常说明没拿到结果就在重试。"
+                             % (lp.get("tool"), detail, lp.get("count")))
+            else:
+                lines.append("- ⚠ 重复调用：工具 %s 共调用 %s 次（非连续；参数%s）。"
+                             % (lp.get("tool"), lp.get("count"),
+                                "相同" if lp.get("same_args") else "未记录"))
         else:
-            lines.append("- ⚠ Possible loop: %s repeated %sx with the same args."
-                         % (lp.get("tool"), lp.get("count")))
+            if lp.get("consecutive"):
+                detail = ("with the same args" if lp.get("same_args")
+                          else "(args not recorded; matched by tool name)")
+                lines.append("- ⚠ Possible loop: %s repeated %sx %s consecutively."
+                             % (lp.get("tool"), lp.get("count"), detail))
+            else:
+                lines.append("- ⚠ Repeated calls: %s called %sx (non-consecutive; args %s)."
+                             % (lp.get("tool"), lp.get("count"),
+                                "identical" if lp.get("same_args") else "not recorded"))
     for d in (a.get("dangerous_ops") or [])[:5]:
         if zh:
             lines.append("- ⚠ 高危操作：%s（%s）" % (d.get("tool"), d.get("flag")))

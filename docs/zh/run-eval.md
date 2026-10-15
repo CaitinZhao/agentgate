@@ -61,13 +61,13 @@ PENDING 题的处理路径（都在逐题结果页完成，证据与裁决同屏
 
 判定内核升级或题库 gold 修复后，不必重跑被测 Agent：`agentgate rejudge <run_id>`（CLI）
 或对已完成 run 调 `POST /api/v1/runs/{run_id}/rejudge`，用**存档的回答与轨迹 + 当前题库**
-重放整个硬校验，原地重写逐题 verdict、六维分数与报告。已记录的终判（人工或 AI 采纳）
+重放整个硬校验，原地重写逐题 verdict、七维分数与报告。已记录的终判（人工或 AI 采纳）
 保留优先，新硬判定只对未裁定的题生效；回放幂等，可重复执行。规则细节见
 [判题标准](judging.md) 第九节。
 
 ## 4. 报告
 
-跑完即出六维雷达、分维度诊断卡、双语报告与产物归档（细节见
+跑完即出七维雷达、分维度诊断卡、双语报告与产物归档（细节见
 [诊断报告](diagnostic-report.md)）。同类库再跑一次即可在对比页做雷达叠加与分维 Δ：
 
 ![对比](../images/09-compare.png)
@@ -79,7 +79,7 @@ run 完成后，全部产物归档到数据卷 `results/<run_id>/`（详情页"�
 | 文件 | 内容 |
 |---|---|
 | `report.md` / `report-en.md` | 双语完整报告 |
-| `scores.json` | 六维分数机读版（run 级 + 逐题 + 诊断卡） |
+| `scores.json` | 七维分数机读版（run 级 + 逐题 + 诊断卡） |
 | `eval_results.json` | 逐题完整判定记录 |
 | `failures.jsonl` | 失败题清单（ASI） |
 | `judge.jsonl` | AI judge 建议留痕（有 AI 参与时） |

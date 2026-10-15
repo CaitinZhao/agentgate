@@ -41,6 +41,18 @@ author or inferred from the gold shape. The final compare is type-specific:
 | state | `{assertions}` | Environment-state assertions run on the platform-managed sandbox (read_file / exec); **the agent's self-report never counts**; no sandbox handle → PENDING |
 | free_text | rubric / reference answer | The hard layer does not judge correctness (one exception, §5) |
 
+### Sign-tolerance policy (equal magnitude accepted)
+
+Numeric cases accept a figure whose MAGNITUDE matches the gold but whose SIGN is flipped:
+"how much did the metric change" with a gold of `1.7` and an answer of `-1.7` is the same
+fact under a different direction convention, so it is a **PASS**. The acceptance is
+recorded in quality as `sign_accepted` (with the delta) and the diagnostic summary states
+"sign differs from the gold; accepted by policy" — a reader can tell the verdict rests on
+policy, not an exact match.
+
+Opt out per pack or per case with `"accept_sign_flip": false`. A different magnitude still
+FAILs even with the opposite sign; a zero gold is unaffected (absolute tolerance).
+
 ## 3) Format and structure checks
 
 - **gold.final.schema** (optional): declares the FINAL JSON's `required` keys and

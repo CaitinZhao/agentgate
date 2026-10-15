@@ -87,6 +87,36 @@ def test_numeric_precision_floor_not_applied_to_precise_gold():
     assert ok is False and "tol_widened_by_precision" not in q
 
 
+def test_sign_flip_accepted_and_recorded_in_quality():
+    # bank policy (default on): a sign-flipped, magnitude-equal figure is the same fact
+    # stated with the opposite direction convention — accept it, but record the acceptance
+    c = _case("numeric", {"value": 0.9, "unit": "%", "tol_rel": 0.01})
+    ok, results, q = _check_final(c, _resp({"value": -0.9, "unit": "%"}), PACK)
+    assert ok is True
+    assert q.get("sign_accepted") is True
+    assert q.get("sign_accepted_delta") == pytest.approx(1.8)
+    assert any(r.name == "numeric_sign" for r in results)
+
+
+def test_sign_flip_does_not_accept_a_different_magnitude():
+    c = _case("numeric", {"value": 0.9, "unit": "%", "tol_rel": 0.01})
+    ok, _r, q = _check_final(c, _resp({"value": -0.5, "unit": "%"}), PACK)
+    assert ok is False and "sign_accepted" not in q
+
+
+def test_sign_flip_policy_can_be_disabled():
+    c = _case("numeric", {"value": 0.9, "unit": "%", "tol_rel": 0.01,
+                          "accept_sign_flip": False})
+    ok, _r, q = _check_final(c, _resp({"value": -0.9, "unit": "%"}), PACK)
+    assert ok is False and "sign_accepted" not in q
+
+
+def test_exact_match_does_not_set_sign_accepted():
+    c = _case("numeric", {"value": 0.9, "unit": "%", "tol_rel": 0.01})
+    ok, _r, q = _check_final(c, _resp({"value": 0.9, "unit": "%"}), PACK)
+    assert ok is True and "sign_accepted" not in q
+
+
 def test_extractive_number_normalization():
     c = _case("extractive", {"value": "16,525", "aliases": []})
     ok, _r, _q = _check_final(c, _resp({"value": "16525.0 million"}, "total was 16525.0"), PACK)

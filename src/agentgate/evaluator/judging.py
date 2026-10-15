@@ -178,6 +178,35 @@ def _final_value(final: Dict) -> str:
     return ""
 
 
+def _sign_flip_accepted(gold_v, v, tol: float, pack: Dict, case) -> bool:
+    """Bank policy: accept a sign-flipped, magnitude-equal figure.
+
+    "How much did the margin change" answered as -1.7 when the gold records 1.7 is the
+    same fact stated with the opposite direction convention — the bank decides. Default ON
+    (an explicit口径 decision); a pack or case can opt out with "accept_sign_flip": false.
+    Both values must be non-zero and have opposite signs; the magnitude must sit inside the
+    same relative tolerance as a normal match, so this never accepts a different quantity.
+    """
+    policy = None
+    try:
+        policy = case.gold.final.get("accept_sign_flip")
+    except AttributeError:
+        policy = None
+    if policy is None:
+        policy = pack.get("accept_sign_flip")
+    if policy is False:
+        return False
+    try:
+        gv, vv = float(gold_v), float(v)
+    except (TypeError, ValueError):
+        return False
+    if gv == 0.0 or vv == 0.0:
+        return False
+    if (gv > 0) == (vv > 0):
+        return False                      # same sign: the normal path already decided
+    return abs(abs(vv) - abs(gv)) / abs(gv) <= tol + 1e-9
+
+
 def _type_default_keys(pack: Dict, ctype: str) -> List[str]:
     return ((pack.get("types") or {}).get(ctype) or {}).get("default_keys") or []
 
@@ -403,6 +432,19 @@ def _check_final(case, response, pack: Dict, assets_roots=None,
                                    else (0.0 if margin <= 1e-9 else 9.9))
         if from_text:
             quality["value_from_text"] = True
+        # sign-agnostic acceptance (bank policy, default on): a sign-flipped but
+        # magnitude-equal figure ("the change is -1.7%" vs gold "1.7%") is ACCEPTED as
+        # PASS. The acceptance is recorded in quality so a reader can see the verdict did
+        # not come from an exact match. Disable per pack/case with "accept_sign_flip": false.
+        if (margin > tol + 1e-9
+                and _sign_flip_accepted(gold_v, v, tol, pack, case)):
+            quality["sign_accepted"] = True
+            quality["sign_accepted_delta"] = float(gold_v) - float(v)
+            results.append(VerifierResult(ok=True, layer="L1", name="numeric_sign",
+                reason="magnitude matches the gold; only the sign differs (accepted by policy)",
+                asi="幅值与金标一致、仅符号相反（按题库口径接受为通过，已标注）",
+                failed_step=None))
+            return True, results, quality
         if margin > tol + 1e-9:
             delta = float(v) - float(gold_v)
             dev_pct = delta / denom * 100.0
@@ -666,6 +708,10 @@ def build_asi(out: Dict, case) -> str:
         lines.append("; ".join(parts) + ".")
         q = out.get("quality") or {}
         risks = []
+        if q.get("sign_accepted"):
+            # a PASS on a sign flip must be legible: the reader needs to know the verdict
+            # came from the bank's direction-tolerance policy, not an exact match
+            risks.append("sign differs from the gold; accepted by policy (magnitude match)")
         if q.get("evidence_missing"):
             risks.append("no evidence citation")
         if q.get("caliber_missing"):

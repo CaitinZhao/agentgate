@@ -37,6 +37,16 @@ gold 形状自动推断。终答比对按题型走不同规则：
 | state | `{assertions}` | 环境终态断言走平台托管沙箱执行（read_file / exec），**Agent 自述永远不算数**；无沙箱句柄 → PENDING |
 | free_text | rubric / 参考答案 | 硬校验不判对错（见第五节的唯一例外） |
 
+### 符号宽容口径（同幅值接受）
+
+数值题默认接受"幅值与金标一致、仅符号相反"的答案：例如问"某指标变化了多少"，金标记为
+`1.7`、Agent 答 `-1.7`（同一事实、方向约定不同）——判为**通过**，并在 quality 里记
+`sign_accepted`（含 delta），诊断摘要也标注"sign differs from the gold; accepted by policy"，
+报告读得出这次通过依据的是口径而非精确匹配。
+
+关闭方式：领域包或单题 gold 里写 `"accept_sign_flip": false`。幅度不同（哪怕符号相反）
+仍判失败；金标为 0 时不适用（走绝对容差）。
+
 ## 三、格式与结构校验
 
 - **gold.final.schema**（可选）：声明 FINAL JSON 的 `required` 键与 `properties` 类型

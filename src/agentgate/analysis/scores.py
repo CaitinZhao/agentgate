@@ -109,6 +109,13 @@ def score_case(case_id: str, verdict: str, judge_out: Dict, analysis: Dict,
             signals.setdefault("quality", []).append(
                 {"case_id": case_id, "penalty": -_QUAL_MARGIN_EDGE,
                  "note": "value used over half of the tolerance"})
+        if quality.get("sign_accepted"):
+            # a policy acceptance, not a penalty: recorded so the quality card and the
+            # report show the PASS came from the direction-tolerance rule
+            signals.setdefault("quality", []).append(
+                {"case_id": case_id, "penalty": None,
+                 "note": "sign differs from the gold; accepted by bank policy "
+                         "(magnitude match, delta %s)" % quality.get("sign_accepted_delta")})
         if quality.get("evidence_missing"):
             q -= _QUAL_EVID_MISS
             signals.setdefault("quality", []).append(

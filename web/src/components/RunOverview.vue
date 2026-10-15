@@ -9,9 +9,15 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   view: any;                       // /runs/{id}/view payload
-}>();
+  parts?: string[] | null;         // subset of panels to render (null = all)
+}>(), { parts: null });
+
+/** whether a named panel should render (used when this block is embedded elsewhere) */
+function show(part: string): boolean {
+  return !props.parts || props.parts.includes(part);
+}
 
 const { t } = useI18n();
 
@@ -101,7 +107,7 @@ const buckets = computed(() => {
 <template>
   <div v-if="view" class="view">
     <!-- headline metrics: the numbers that direct a decision, side by side -->
-    <div class="statrow">
+    <div class="statrow" v-if="show('stats')">
       <div class="stat">
         <div class="stat-label">{{ $t("scores.total") }}</div>
         <div class="stat-value" :class="{ muted: m.total_score == null }">
@@ -134,7 +140,7 @@ const buckets = computed(() => {
 
     <div class="panelgrid">
       <!-- where the wall time went -->
-      <div class="card" v-if="timeBars.length">
+      <div class="card" v-if="show('time') && timeBars.length">
         <h4>{{ $t("view.timeTitle") }}</h4>
         <div class="bars">
           <div v-for="b in timeBars" :key="b.key" class="barrow">
@@ -149,7 +155,7 @@ const buckets = computed(() => {
       </div>
 
       <!-- which dimension loses the most points -->
-      <div class="card" v-if="signalBars.length">
+      <div class="card" v-if="show('signals') && signalBars.length">
         <h4>{{ $t("view.signalsTitle") }}</h4>
         <div class="bars">
           <div v-for="b in signalBars" :key="b.key" class="barrow">
@@ -161,7 +167,7 @@ const buckets = computed(() => {
       </div>
 
       <!-- loop cost: the number the per-case view cannot show -->
-      <div class="card" v-if="loop.cases">
+      <div class="card" v-if="show('loop') && loop.cases">
         <h4>{{ $t("view.loopTitle") }}</h4>
         <div class="looprow">
           <div><b class="warn">{{ loop.cases }}</b> <span class="muted">{{ $t("view.loopCases") }}</span></div>
@@ -178,7 +184,7 @@ const buckets = computed(() => {
       </div>
 
       <!-- token distribution -->
-      <div class="card" v-if="buckets.length">
+      <div class="card" v-if="show('hist') && buckets.length">
         <h4>{{ $t("view.costTitle") }}</h4>
         <div class="hist">
           <div v-for="b in buckets" :key="b.label" class="histcol">
@@ -191,7 +197,7 @@ const buckets = computed(() => {
     </div>
 
     <!-- tokens vs tool calls: does more calling actually buy anything? -->
-    <div class="card" v-if="scatter">
+    <div class="card" v-if="show('scatter') && scatter">
       <h4>{{ $t("view.scatterTitle") }}</h4>
       <svg :viewBox="`0 0 ${scatter.W} ${scatter.H}`" class="scatter">
         <line :x1="scatter.PAD" :y1="scatter.H - scatter.PAD"
@@ -213,7 +219,7 @@ const buckets = computed(() => {
     </div>
 
     <!-- what the artifacts did not contain: stated, not silently absent -->
-    <div class="card gapcard" v-if="(view.data_gaps || []).length">
+    <div class="card gapcard" v-if="show('gaps') && (view.data_gaps || []).length">
       <h4>{{ $t("view.gapsTitle") }}</h4>
       <div class="gaps">
         <span v-for="g in view.data_gaps" :key="g" class="gapchip">{{ $t("view.gap." + g) }}</span>

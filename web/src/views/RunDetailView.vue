@@ -13,7 +13,7 @@ const id = route.params.id as string;
 const run = ref<any>(null);
 const err = ref("");
 const msgOk = ref("");
-const tab = ref<"items" | "report" | "analysis" | "artifacts">("items");
+const tab = ref<"items" | "report" | "analysis" | "tracedata" | "artifacts">("items");
 const reportText = ref("");
 const analysisText = ref("");
 const reportLang = ref<"zh" | "en">(locale.value === "en" ? "en" : "zh");
@@ -28,6 +28,7 @@ watch(locale, (l) => {
 });
 const scores = ref<any>(null);          // scores.json (seven-dimension hexagon, doc 35)
 const view = ref<any>(null);            // aggregated execution view (metric cards, charts)
+const runMeta = ref<any>(null);         // baseline facts for the report tab
 const openCard = ref("");
 let timer: any = null;
 
@@ -61,8 +62,12 @@ async function load() {
 async function loadView() {
   // aggregated metrics/charts: multiple readings, time split, loop cost, distributions.
   // Absent for pre-view runs — the overview simply does not render then.
-  try { view.value = await api("GET", `/runs/${id}/view`); }
-  catch { view.value = false; }
+  try {
+    view.value = await api("GET", `/runs/${id}/view`);
+    runMeta.value = { target: run.value?.target_url, model: run.value?.model,
+                      eval_set_version: run.value?.eval_set_version,
+                      repeat_k: run.value?.stability_k };
+  } catch { view.value = false; }
 }
 
 async function loadScores() {
@@ -276,6 +281,45 @@ const nativeRows = computed(() => {
   }));
 });
 
+// ---- analysis tab + trace-data tab: derived views over the aggregated payload --------
+const toolStats = computed(() => {
+  // which tools the run actually leaned on, from the per-case sequences
+  const hits: Record<string, number> = {};
+  for (const c of view.value?.cases || []) {
+    for (const t of c.tool_sequence || []) hits[t] = (hits[t] || 0) + 1;
+  }
+  const rows = Object.entries(hits).map(([name, n]) => ({ name, n }));
+  const max = Math.max(1, ...rows.map((r) => r.n));
+  return rows.sort((a, b) => b.n - a.n).slice(0, 10).map((r) => ({ ...r, pct: (r.n / max) * 100 }));
+});
+const slowRows = computed(() => {
+  // the expensive end of the run: heaviest by token, so the reader sees where budget went
+  const rows = [...(view.value?.cases || [])].filter((c: any) => c.tokens > 0);
+  return rows.sort((a: any, b: any) => b.tokens - a.tokens).slice(0, 12);
+});
+const reportMeta = computed(() => runMeta.value);
+const traceArtifacts = computed(() =>
+  artifacts.value.filter((a) => /spans_raw|llm_calls_raw|runs_meta/.test(a)));
+const spanRows = computed(() => {
+  const out: any[] = [];
+  let i = 0;
+  for (const c of view.value?.cases || []) {
+    for (const l of c.lane || []) {
+      out.push({ k: i++, i: i, case_id: c.case_id, kind: l[0], name: l[1],
+                 ms: Math.round(l[3] || 0), tokens: l[4] || 0 });
+      if (out.length >= 400) return out;      // the archive can be huge: cap the table
+    }
+  }
+  return out;
+});
+const dialogueRows = computed(() => {
+  const d = view.value?.dialogue || [];
+  return d.slice(0, 40).map((m: any) => ({
+    role: m.role || "?",
+    text: String(m.content || "").slice(0, 900),
+  }));
+});
+
 function dl(fname: string) {
   download(`/runs/${id}/artifacts/${fname}`, fname).catch((e) => (err.value = e.message));
 }
@@ -292,6 +336,19 @@ function dl(fname: string) {
     <div v-if="err" class="error-box">{{ err }}</div>
     <div v-if="run.error" class="error-box">{{ $t("runDetail.error") }}: {{ run.error }}</div>
 
+    <!-- the aggregated blocks stay at the top of the page (always visible); tabs below
+         render their own content and do not repeat these panels -->
+    <RunOverview v-if="done && view && view.metrics" :view="view" />
+
+    <div class="checkbar" style="margin-bottom: 10px">
+      <button class="btn small" :class="{ primary: tab === 'items' }" @click="switchTab('items')">{{ $t("runDetail.items") }}</button>
+      <button v-if="done" class="btn small" :class="{ primary: tab === 'report' }" @click="switchTab('report')">{{ $t("runDetail.tabReport") }}</button>
+      <button v-if="done" class="btn small" :class="{ primary: tab === 'analysis' }" @click="switchTab('analysis')">{{ $t("runDetail.tabAnalysis") }}</button>
+      <button v-if="done" class="btn small" :class="{ primary: tab === 'tracedata' }" @click="switchTab('tracedata')">{{ $t("runDetail.tabTraceData") }}</button>
+      <button v-if="done" class="btn small" :class="{ primary: tab === 'artifacts' }" @click="switchTab('artifacts')">{{ $t("runDetail.tabArtifacts") }}</button>
+    </div>
+
+    <template v-if="tab === 'items'">
     <div class="card">
       <div class="inline" style="margin-bottom: 6px">
         <b>{{ $t("runDetail.progress") }}</b>
@@ -311,108 +368,16 @@ function dl(fname: string) {
       {{ $t("runDetail.pendingHint") }}
     </div>
     </div>
-
     <div class="checkbar" style="margin-bottom: 10px">
-      <button class="btn small" :class="{ primary: tab === 'items' }" @click="switchTab('items')">{{ $t("runDetail.items") }}</button>
-      <button v-if="done" class="btn small" :class="{ primary: tab === 'report' }" @click="switchTab('report')">{{ $t("runDetail.tabReport") }}</button>
-      <button v-if="done" class="btn small" :class="{ primary: tab === 'analysis' }" @click="switchTab('analysis')">{{ $t("runDetail.tabAnalysis") }}</button>
-      <button v-if="done" class="btn small" :class="{ primary: tab === 'artifacts' }" @click="switchTab('artifacts')">{{ $t("runDetail.tabArtifacts") }}</button>
       <button v-if="done && (run.items || []).some(i => i.verdict === 'PENDING')" class="btn small"
               :disabled="batchBusy" @click="batchJudge">
         ✨ {{ $t("runDetail.batchJudge") }}{{ batchBusy ? ` (${batchDone}/${batchTotal})` : "" }}</button>
       <button v-if="batchBusy" class="btn small danger" @click="cancelBatchJudge">
         {{ $t("runDetail.batchJudgeCancel") }}</button>
     </div>
+    </template>
 
-    <!-- execution overview: aggregated metrics + charts (data the per-case tables cannot show) -->
-    <RunOverview v-if="done && view && view.metrics" :view="view" />
 
-    <!-- seven-dimension hexagon + diagnostic cards (doc 35 §2/§3/§6) -->
-    <div class="card" v-if="done && scores && scores.run_scores">
-      <h4 style="margin: 0 0 4px">{{ $t("scores.title") }}</h4>
-      <div class="inline" style="align-items: flex-start">
-        <ScoreRadar :scores="scores.run_scores" :na-reasons="naReasons" :size="260" />
-        <div style="flex: 1; min-width: 0">
-          <div class="inline" style="margin-bottom: 8px">
-            <b>{{ $t("scores.total") }}:
-              {{ scores.total ?? "n/a" }}</b>
-            <span v-if="scores.capped_by_safety" class="chip FAIL">{{ $t("scores.safetyCapped") }}</span>
-            <span v-if="(run.stability_k || 1) > 1" class="chip PENDING">
-              {{ $t("scores.stabilityOn", { k: run.stability_k }) }}</span>
-          </div>
-          <div class="muted" style="margin-bottom: 8px">
-            {{ $t("scores.counts", { p: scores.counts.pass, f: scores.counts.fail,
-                                     n: scores.counts.pending, s: scores.counts.skipped }) }}
-          </div>
-          <div class="checkbar" style="flex-wrap: wrap">
-            <button v-for="(card, dim) in scores.cards" :key="dim" class="btn small"
-                    :class="{ primary: openCard === String(dim) }" @click="openCard = openCard === String(dim) ? '' : String(dim)">
-              {{ $t("scores.dim." + dim) }}: {{ card.score ?? "n/a" }}
-            </button>
-          </div>
-          <div v-for="(card, dim) in scores.cards" :key="'card' + dim" v-show="openCard === String(dim)"
-               style="border-top: 1px solid #e2e8f0; margin-top: 8px; padding-top: 8px">
-            <div v-if="card.signals?.length">
-              <b class="muted">{{ $t("scores.signals") }}</b>
-              <ul style="margin: 4px 0">
-                <li v-for="(s, i) in card.signals" :key="i">
-                  <a class="mono link" href="javascript:void(0)"
-                     @click="openCaseDetail(s.case_id)">{{ s.case_id }}</a> — {{ noteText(s) }}
-                </li>
-              </ul>
-            </div>
-            <div v-if="card.worst?.length">
-              <b class="muted">{{ $t("scores.worst") }}</b>
-              <ul style="margin: 4px 0">
-                <li v-for="(w, i) in card.worst" :key="i">
-                  <a class="mono link" href="javascript:void(0)"
-                     @click="openCaseDetail(w.case_id)">{{ w.case_id }}</a> — {{ noteText(w) }}
-                  <span v-if="w.asi" class="muted"> · ASI: {{ w.asi }}</span>
-                </li>
-              </ul>
-            </div>
-            <div v-if="card.improvements?.length">
-              <b class="muted">{{ $t("scores.improvements") }}</b>
-              <ul style="margin: 4px 0">
-                <li v-for="(im, i) in card.improvements" :key="i">{{ improveText(card, i) }}</li>
-              </ul>
-            </div>
-            <div v-if="!card.signals?.length && !card.improvements?.length" class="muted">
-              {{ $t("scores.noSignals") }}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="card muted" v-if="done && scores === false">{{ $t("scores.legacyRun") }}</div>
-
-    <!-- native (dataset-original) reading: per-bank metric under the dataset's own rules -->
-    <div class="card" v-if="done && nativeRows.length">
-      <h4 style="margin: 0 0 4px">{{ $t("scores.nativeTitle") }}</h4>
-      <div class="muted" style="margin-bottom: 6px">{{ $t("scores.nativeHint") }}</div>
-      <table class="tbl" style="width: auto">
-        <thead><tr>
-          <th>{{ $t("runDetail.colBank") }}</th><th>{{ $t("scores.nativeMetric") }}</th>
-          <th>{{ $t("scores.nativeRate") }}</th><th></th>
-        </tr></thead>
-        <tbody>
-          <tr v-for="n in nativeRows" :key="n.suite">
-            <td class="mono">{{ n.suite }}</td>
-            <td>{{ n.label }}</td>
-            <!-- same rule as the report: a rate over ZERO resolved cases is withheld, not
-                 printed as 0% (that reads as a measured "nothing succeeded") -->
-            <td v-if="n.rate === null && !n.resolved && n.total">
-              <span class="muted">{{ $t("scores.nativeWithheld") }}</span></td>
-            <td v-else><b>{{ n.rate ?? "n/a" }}</b><span class="muted">{{ n.family === 'airbench' ? '' : '%' }}</span></td>
-            <td class="muted">{{ n.pass }}/{{ n.total }}
-              <span v-if="n.undecided" class="muted">· {{ n.undecided }} {{ $t("runDetail.pendingShort") }}</span>
-              <span v-if="n.metrics" class="mono">
-                {{ Object.entries(n.metrics).map(([k, v]) => k + "=" + v).join(" · ") }}</span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
 
     <div class="tbl-wrap">
     <table class="tbl" v-if="tab === 'items'">
@@ -459,12 +424,185 @@ function dl(fname: string) {
         <button v-if="done" class="btn small" :disabled="rebuildBusy"
                 @click="rebuildReport">{{ $t("runDetail.rebuildReport") }}</button>
       </div>
+
+      <!-- 1) baseline report facts: what was evaluated, by whom, with which outcome -->
+      <div class="card" v-if="reportMeta">
+        <h4>{{ $t("runDetail.baseInfo") }}</h4>
+        <div class="baserow">
+          <div><span class="muted">{{ $t("runDetail.baseTarget") }}</span>
+            <b class="mono">{{ reportMeta.target || "—" }}</b></div>
+          <div><span class="muted">{{ $t("runDetail.baseModel") }}</span>
+            <b>{{ reportMeta.model || "—" }}</b></div>
+          <div><span class="muted">{{ $t("runDetail.baseBank") }}</span>
+            <b>{{ reportMeta.eval_set_version || "—" }}</b></div>
+          <div><span class="muted">{{ $t("runDetail.baseRepeat") }}</span>
+            <b>{{ reportMeta.repeat_k || 1 }}</b></div>
+        </div>
+      </div>
+
+      <!-- the dimension radar + diagnostics and the native reading live in this tab -->
+      <div class="card" v-if="scores && scores.run_scores">
+        <h4 style="margin: 0 0 4px">{{ $t("scores.title") }}</h4>
+        <div class="inline" style="align-items: flex-start">
+          <ScoreRadar :scores="scores.run_scores" :na-reasons="naReasons" :size="260" />
+          <div style="flex: 1; min-width: 0">
+            <div class="inline" style="margin-bottom: 8px">
+              <b>{{ $t("scores.total") }}: {{ scores.total ?? "n/a" }}</b>
+              <span v-if="scores.capped_by_safety" class="chip FAIL">{{ $t("scores.safetyCapped") }}</span>
+            </div>
+            <div class="muted" style="margin-bottom: 8px">
+              {{ $t("scores.counts", { p: scores.counts.pass, f: scores.counts.fail,
+                                       n: scores.counts.pending, s: scores.counts.skipped }) }}
+            </div>
+            <div class="checkbar" style="flex-wrap: wrap">
+              <button v-for="(card, dim) in scores.cards" :key="dim" class="btn small"
+                      :class="{ primary: openCard === String(dim) }"
+                      @click="openCard = openCard === String(dim) ? '' : String(dim)">
+                {{ $t("scores.dim." + dim) }}: {{ card.score ?? "n/a" }}
+              </button>
+            </div>
+            <div v-for="(card, dim) in scores.cards" :key="'card' + dim" v-show="openCard === String(dim)"
+                 style="border-top: 1px solid var(--ag-line); margin-top: 8px; padding-top: 8px">
+              <div v-if="card.signals?.length">
+                <b class="muted">{{ $t("scores.signals") }}</b>
+                <ul style="margin: 4px 0">
+                  <li v-for="(s, i) in card.signals" :key="i">
+                    <a class="mono link" href="javascript:void(0)"
+                       @click="openCaseDetail(s.case_id)">{{ s.case_id }}</a> — {{ noteText(s) }}
+                  </li>
+                </ul>
+              </div>
+              <div v-if="card.worst?.length">
+                <b class="muted">{{ $t("scores.worst") }}</b>
+                <ul style="margin: 4px 0">
+                  <li v-for="(w, i) in card.worst" :key="i">
+                    <a class="mono link" href="javascript:void(0)"
+                       @click="openCaseDetail(w.case_id)">{{ w.case_id }}</a> — {{ noteText(w) }}
+                  </li>
+                </ul>
+              </div>
+              <div v-if="card.improvements?.length">
+                <b class="muted">{{ $t("scores.improvements") }}</b>
+                <ul style="margin: 4px 0">
+                  <li v-for="(im, i) in card.improvements" :key="i">{{ improveText(card, i) }}</li>
+                </ul>
+              </div>
+              <div v-if="!card.signals?.length && !card.worst?.length && !card.improvements?.length"
+                   class="muted">{{ $t("scores.noSignals") }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- requested here specifically: the tool-call / token relation, in the report tab -->
+      <div class="card" v-if="view && view.metrics">
+        <h4>{{ $t("view.scatterTitle") }}</h4>
+        <div class="muted" style="margin-bottom: 6px">{{ $t("view.scatterHint") }}</div>
+        <RunOverview :view="view" :parts="['scatter']" />
+      </div>
+
       <div class="card md-body" v-html="md(reportText)"></div>
     </template>
 
     <template v-if="tab === 'analysis'">
-      <div v-if="analysisText" class="card md-body" v-html="md(analysisText)"></div>
-      <div v-else class="card muted">{{ $t("runDetail.noAnalysis") }}</div>
+      <!-- trajectory analysis as VIEWS (where time went, which tools, which cases looped);
+           the raw span/dialogue archive is the separate 轨迹数据 tab, not dumped here -->
+      <div v-if="view?.loop?.cases" class="card">
+        <h4>{{ $t("runDetail.analysisPerf") }}</h4>
+        <div class="looprow">
+          <div><b class="warn">{{ view.loop.cases }}</b> <span class="muted">{{ $t("view.loopCases") }}</span></div>
+          <div><b>{{ view.loop.groups }}</b> <span class="muted">{{ $t("view.loopGroups") }}</span></div>
+          <div v-if="view.loop.token_avg_loop && view.loop.token_avg_clean">
+            <span class="muted">{{ $t("view.loopCost") }}:</span>
+            <b class="bad">{{ view.loop.token_avg_loop.toLocaleString() }}</b>
+            <span class="muted">vs</span>
+            <b class="ok">{{ view.loop.token_avg_clean.toLocaleString() }}</b>
+          </div>
+        </div>
+        <div class="muted" style="margin-top: 8px">
+          {{ $t("view.llmDominant", { p: view.metrics?.llm_share }) }}</div>
+      </div>
+      <div v-if="toolStats.length" class="card">
+        <h4>{{ $t("runDetail.analysisTools") }}</h4>
+        <div class="bars">
+          <div v-for="tl in toolStats" :key="tl.name" class="barrow">
+            <span class="barlabel mono">{{ tl.name }}</span>
+            <div class="bartrack"><div class="barfill" :style="{ width: tl.pct + '%' }"></div></div>
+            <span class="barval">{{ tl.n }}</span>
+          </div>
+        </div>
+        <div class="muted" style="margin-top: 8px">{{ $t("runDetail.analysisToolsHint") }}</div>
+      </div>
+      <div v-if="slowRows.length" class="card">
+        <h4>{{ $t("runDetail.analysisSlow") }}</h4>
+        <table class="tbl">
+          <thead><tr>
+            <th>{{ $t("runDetail.colCase") }}</th><th>{{ $t("runDetail.colVerdict") }}</th>
+            <th>{{ $t("runDetail.colTokens") }}</th><th>{{ $t("runDetail.colTools") }}</th>
+            <th>{{ $t("runDetail.colWall") }}</th><th>{{ $t("runDetail.colLoop") }}</th>
+          </tr></thead>
+          <tbody>
+            <tr v-for="c in slowRows" :key="c.case_id">
+              <td><a class="mono link" href="javascript:void(0)"
+                     @click="openCaseDetail(c.case_id)">{{ c.case_id }}</a></td>
+              <td><span class="chip" :class="c.verdict">{{ $t("verdict." + c.verdict) }}</span></td>
+              <td class="mono">{{ c.tokens.toLocaleString() }}</td>
+              <td class="mono">{{ c.tool_calls }}</td>
+              <td class="mono">{{ c.wall_s }}s</td>
+              <td class="mono" :class="{ bad: c.loop_groups.length }">
+                {{ c.loop_groups.length ? c.loop_groups.map(g => g.tool + "×" + g.count).join(", ") : "—" }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div v-if="analysisText" class="card">
+        <h4>{{ $t("runDetail.analysisNarrative") }}</h4>
+        <div class="md-body" v-html="md(analysisText)"></div>
+      </div>
+      <div v-if="!view && !analysisText" class="card muted">{{ $t("runDetail.noAnalysis") }}</div>
+    </template>
+
+    <!-- raw trajectory archive: spans + message-level dialogue, for digging not reading -->
+    <template v-if="tab === 'tracedata'">
+      <div class="card">
+        <h4>{{ $t("runDetail.traceDataTitle") }}</h4>
+        <div class="muted" style="margin-bottom: 8px">{{ $t("runDetail.traceDataHint") }}</div>
+        <div class="inline">
+          <button v-for="a in traceArtifacts" :key="a" class="btn small mono" @click="dl(a)">{{ a }}</button>
+        </div>
+      </div>
+      <div v-if="spanRows.length" class="card">
+        <h4>{{ $t("runDetail.traceSpans") }}</h4>
+        <div class="muted" style="margin-bottom: 6px">
+          {{ $t("runDetail.traceSpansHint", { n: spanRows.length }) }}</div>
+        <table class="tbl">
+          <thead><tr>
+            <th>#</th><th>{{ $t("runDetail.colCase") }}</th><th>kind</th><th>name</th>
+            <th>ms</th><th>tokens</th>
+          </tr></thead>
+          <tbody>
+            <tr v-for="sp in spanRows" :key="sp.k">
+              <td class="mono muted">{{ sp.i }}</td>
+              <td class="mono">{{ sp.case_id }}</td>
+              <td><span class="chip" :class="sp.kind === 'llm' ? 'PASS' : 'SKIPPED'">{{ sp.kind }}</span></td>
+              <td class="mono">{{ sp.name }}</td>
+              <td class="mono">{{ sp.ms }}</td>
+              <td class="mono">{{ sp.tokens || "—" }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div v-if="dialogueRows.length" class="card">
+        <h4>{{ $t("runDetail.traceDialogue") }}</h4>
+        <div class="muted" style="margin-bottom: 6px">{{ $t("runDetail.traceDialogueHint") }}</div>
+        <div v-for="(d, i) in dialogueRows" :key="i" class="dlgrow">
+          <span class="chip" :class="d.role === 'assistant' ? 'PASS' : 'SKIPPED'">{{ d.role }}</span>
+          <pre class="mono dlgtext">{{ d.text }}</pre>
+        </div>
+      </div>
+      <div v-if="!spanRows.length && !dialogueRows.length" class="card muted">
+        {{ $t("runDetail.traceNoData") }}
+      </div>
     </template>
 
     <template v-if="tab === 'artifacts'">

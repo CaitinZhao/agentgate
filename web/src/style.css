@@ -181,3 +181,24 @@ dialog.uc-dialog[open] {
    button — the same affordance the items table already provides */
 a.link, .link { color: #2563eb; cursor: pointer; text-decoration: none; }
 a.link:hover, .link:hover { text-decoration: underline; }
+
+/* analysis tab + trace-data tab (RunDetailView): bars reuse the overview's visual language
+   so an embedded panel reads the same as it does on the overview */
+.bars { display: grid; gap: 6px; }
+.barrow { display: grid; grid-template-columns: 130px 1fr 52px; align-items: center; gap: 8px;
+          font-size: 12.5px; }
+.barlabel { color: var(--ag-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bartrack { background: var(--ag-surface-2); border-radius: 4px; height: 9px; overflow: hidden; }
+.barfill { height: 100%; border-radius: 4px; background: var(--ag-primary); }
+.barval { text-align: right; font-variant-numeric: tabular-nums; color: var(--ag-muted); }
+
+/* baseline facts row */
+.baserow { display: flex; flex-wrap: wrap; gap: 22px; font-size: 13px; }
+.baserow > div { display: flex; gap: 6px; align-items: baseline; }
+
+/* raw dialogue records */
+.dlgrow { display: grid; grid-template-columns: 84px 1fr; gap: 10px; margin-bottom: 8px;
+          align-items: start; }
+.dlgtext { margin: 0; background: var(--ag-surface-2); border: 1px solid var(--ag-line);
+           border-radius: 6px; padding: 7px 9px; font-size: 12px; white-space: pre-wrap;
+           max-height: 180px; overflow: auto; }

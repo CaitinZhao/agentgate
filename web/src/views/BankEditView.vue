@@ -400,10 +400,10 @@ onMounted(async () => { await load(); await loadDraftState(); await loadPack(); 
     <p class="muted">{{ $t("edit.packAiHint") }}</p>
     <div class="form-row"><label>{{ $t("edit.packAiDesc") }}</label>
       <textarea v-model="aiPack.description" rows="4"
-                placeholder="例：车险/寿险条款问答，材料=条款 PDF 库，由检索工具提供" /></div>
+                :placeholder="$t('edit.packDescHint')" /></div>
     <div class="form-row"><label>{{ $t("edit.packAiSamples") }}</label>
       <textarea v-model="aiPack.samples" rows="5"
-                placeholder="3~5 道样例题（含一条材料原文示例）" /></div>
+                :placeholder="$t('edit.packSamplesHint')" /></div>
     <div v-if="aiPackErr" class="error-box">{{ aiPackErr }}</div>
     <div v-if="aiPackDraft" class="form-row"><label>{{ $t("edit.packAiResult") }}</label>
       <textarea v-model="aiPackDraftText" rows="10" class="mono" style="font-size: 12px" /></div>

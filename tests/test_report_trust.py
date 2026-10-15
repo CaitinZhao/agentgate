@@ -291,3 +291,28 @@ def test_null_count_is_unchecked_not_consistent(tmp_path):
     r4 = run([{"case_id": "G", "verdict": "PASS", "model_calls": 0,
                "scores": {"safety": 100.0}}], [{"task_id": "G", "spans": []}])
     assert r4["ok"] is True and r4["findings"] == []
+
+
+def test_localization_tables_have_no_broken_backreferences():
+    """A replacement that references a capture group must actually carry that reference.
+
+    A non-raw replacement string turns  into the control character , which silently
+    DROPS the value ("平均每题  次工具调用" with the number missing). A translation table is
+    exactly the kind of place where that goes unnoticed, so it is checked mechanically.
+    """
+    import re as _re
+    from agentgate.analysis.scores import _IMPROVE_ZH, _NOTE_ZH
+    for table, name in ((_NOTE_ZH, "_NOTE_ZH"), (_IMPROVE_ZH, "_IMPROVE_ZH")):
+        for pattern, repl in table:
+            groups = _re.compile(pattern).groups
+            if not groups:
+                continue
+            # every group must be referenced, and no control char may stand in for one
+            missing = [g for g in range(1, groups + 1) if ("%s%d" % (chr(92), g)) not in repl]
+            assert not missing, (
+                "%s: pattern %r has %d group(s) but the replacement %r omits %s "
+                "(a non-raw string turns \1 into a control char and drops the value)"
+                % (name, pattern, groups, repl, missing))
+            assert chr(1) not in repl and chr(2) not in repl, (
+                "%s: replacement %r contains a control character where a backreference "
+                "belongs" % (name, repl))

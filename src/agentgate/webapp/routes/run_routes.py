@@ -671,7 +671,23 @@ def run_scores(run_id: str, user: dict = Depends(auth.require_min("member"))):
     if not p.exists():
         # pre-C1 runs have no scores file — the UI degrades to the plain report
         raise HTTPException(404, "scores file missing (run predates seven-dimension scoring)")
-    return json.loads(p.read_text(encoding="utf-8"))
+    scores = json.loads(p.read_text(encoding="utf-8"))
+    # The scorer stores its signal/improvement prose in ENGLISH (it is also the
+    # machine-readable record). The report translates at render time; the API must expose
+    # the same two languages, or a run viewed in the UI shows English cards next to a
+    # Chinese report for the SAME data. Same shape as the ASI fields (xxx / xxx_en).
+    from ...analysis.scores import _improve_text, _note_text
+    for card in (scores.get("cards") or {}).values():
+        for key in ("signals", "worst"):
+            for item in card.get(key) or []:
+                zh = _note_text(item.get("note", ""), "zh")
+                if zh != item.get("note"):
+                    item["note_zh"] = zh
+        for i, im in enumerate(card.get("improvements") or []):
+            zh = _improve_text(im, "zh")
+            if zh != im:
+                card["improvements_zh"] = (card.get("improvements_zh") or []) + [zh]
+    return scores
 
 
 @router.get("/benchmarks/{name}/trend")

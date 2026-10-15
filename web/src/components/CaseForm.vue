@@ -258,7 +258,7 @@ async function aiRubric() {
       <p class="muted">{{ $t("edit.aiDraftHint") }}</p>
       <div class="form-row"><label>{{ $t("edit.aiMaterial") }}</label>
         <textarea v-model="aiMaterial" rows="6"
-                  placeholder="材料原文 / 数据集金标答案（LLM 只做结构化，不发明金标）" /></div>
+                  :placeholder="$t('edit.aiRubricHint')" /></div>
       <div v-if="aiErr" class="error-box">{{ aiErr }}</div>
       <div class="inline" style="margin-top: 8px">
         <button class="btn primary" type="button" :disabled="aiBusy || !f.query.trim()" @click="aiDraft">

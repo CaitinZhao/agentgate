@@ -246,6 +246,17 @@ const naReasons = computed<Record<string, string>>(() => {
 });
 
 // native (dataset-original) reading chips per bank — the dual-score convention
+// scorer prose is stored in English (machine-readable record) with a zh variant supplied
+// by the API; the UI picks by locale so a card never shows a different language than the
+// report for the same run
+function noteText(item: any): string {
+  return (locale.value === "zh" ? item.note_zh : undefined) || item.note || "";
+}
+function improveText(card: any, i: number): string {
+  const list = locale.value === "zh" ? card.improvements_zh : undefined;
+  return (list && list[i]) || (card.improvements || [])[i] || "";
+}
+
 const nativeRows = computed(() => {
   const nat = scores.value?.native;
   if (!nat || typeof nat !== "object") return [];
@@ -333,7 +344,7 @@ function dl(fname: string) {
               <ul style="margin: 4px 0">
                 <li v-for="(s, i) in card.signals" :key="i">
                   <a class="mono link" href="javascript:void(0)"
-                     @click="openCaseDetail(s.case_id)">{{ s.case_id }}</a> — {{ s.note }}
+                     @click="openCaseDetail(s.case_id)">{{ s.case_id }}</a> — {{ noteText(s) }}
                 </li>
               </ul>
             </div>
@@ -342,7 +353,7 @@ function dl(fname: string) {
               <ul style="margin: 4px 0">
                 <li v-for="(w, i) in card.worst" :key="i">
                   <a class="mono link" href="javascript:void(0)"
-                     @click="openCaseDetail(w.case_id)">{{ w.case_id }}</a> — {{ w.note }}
+                     @click="openCaseDetail(w.case_id)">{{ w.case_id }}</a> — {{ noteText(w) }}
                   <span v-if="w.asi" class="muted"> · ASI: {{ w.asi }}</span>
                 </li>
               </ul>
@@ -350,7 +361,7 @@ function dl(fname: string) {
             <div v-if="card.improvements?.length">
               <b class="muted">{{ $t("scores.improvements") }}</b>
               <ul style="margin: 4px 0">
-                <li v-for="(im, i) in card.improvements" :key="i">{{ im }}</li>
+                <li v-for="(im, i) in card.improvements" :key="i">{{ improveText(card, i) }}</li>
               </ul>
             </div>
             <div v-if="!card.signals?.length && !card.improvements?.length" class="muted">

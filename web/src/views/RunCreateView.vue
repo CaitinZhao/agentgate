@@ -135,7 +135,7 @@ async function runProbe() {
         <span class="muted">{{ $t("runCreate.levels") }}:</span>
         <label v-for="l in ['L0', 'L1', 'L2']" :key="l">
           <input type="checkbox" :value="l" v-model="levels" /> {{ l }}</label>
-        <span class="muted">· {{ chosenCount }} 题</span>
+        <span class="muted">· {{ $t("runCreate.casesPicked", { n: chosenCount }) }}</span>
       </div>
 
       <table class="tbl">
@@ -156,7 +156,7 @@ async function runProbe() {
               <td><b>{{ b.display_name || b.name }}</b>
                 <span v-if="(b.display_name || b.name) !== b.name" class="mono muted">{{ b.name }}</span>
                 <div class="muted">{{ $i18n.locale === 'en' ? b.description_en : b.description_zh }}</div></td>
-              <td class="muted">{{ b.case_count }} 题</td>
+              <td class="muted">{{ $t("runCreate.casesCount", { n: b.case_count }) }}</td>
             </tr>
           </template>
           <tr v-if="privateBanks.length" class="group-head">
@@ -172,7 +172,7 @@ async function runProbe() {
           <tr v-for="b in privateBanks" :key="b.name">
             <td style="width: 30px"><input type="checkbox" v-model="selected[b.name]" /></td>
             <td><b>{{ b.display_name || b.name }}</b> <span class="mono muted">{{ b.name }}</span></td>
-            <td class="muted">{{ b.case_count }} 题</td>
+            <td class="muted">{{ $t("runCreate.casesCount", { n: b.case_count }) }}</td>
           </tr>
         </tbody>
       </table>

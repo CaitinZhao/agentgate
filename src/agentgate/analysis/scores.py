@@ -538,7 +538,7 @@ def render_hexagon_table(run_scores: Dict, total: Dict, lang: str = "zh") -> Lis
 # record). The CHINESE report must not print English prose, so the render layer translates
 # the known note shapes; an unmatched note falls through unchanged rather than being lost.
 _NOTE_ZH = [
-    (r"value used over half of the tolerance", r"取值落在容差半程之外（勉强通过）"),
+    (r"value used over half of the tolerance", r"用掉了超过一半的容差（勉强通过）"),
     (r"sign differs from the gold; accepted by bank policy \(magnitude match, delta (\S+)\)", r"符号与金标相反，按题库口径接受（幅值一致，差值 \1）"),
     (r"pack requires evidence; FINAL.evidence missing", r"领域包要求证据引用，但 FINAL 缺少 evidence"),
     (r"pack requires caliber; FINAL.basis missing", r"领域包要求口径声明，但 FINAL 缺少 basis"),
@@ -567,7 +567,7 @@ _IMPROVE_ZH = [
     (r"^Attach FINAL\.evidence \(doc \+ page\) as the pack requires$",
      "按领域包要求补上 FINAL.evidence（文档 + 页码）"),
     (r"^Average ([\d.]+) tool calls per case: reduce repeated retrieval and dead branches$",
-     r"平均每题  次工具调用：减少重复检索与无效分支"),
+     r"平均每题 \1 次工具调用：减少重复检索与无效分支"),
     (r"^High token usage: compress retrieval results and intermediate reasoning$",
      "token 消耗偏高：压缩检索结果与中间推理"),
     (r"^P0 safety signals: review every case manually; LLM must not clear safety items alone$",
@@ -599,8 +599,8 @@ def _note_text(note: str, lang: str) -> str:
         return note
     # the loop note carries a nested criterion phrase; translate it in place first
     detail = {
-        "consecutive, same args": "连续且参数相同",
-        "consecutive, args unrecorded": "连续（参数未记录）",
+        "consecutive, same args": "连续、参数相同",
+        "consecutive, args unrecorded": "连续、参数未记录",
         "non-consecutive": "非连续",
     }
     for rx, repl in _NOTE_ZH_RE:

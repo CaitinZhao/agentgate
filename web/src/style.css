@@ -1,14 +1,38 @@
 /* AgentGate web UI — single global stylesheet (no framework). */
+/* Design tokens, aligned with the execution-view redesign: `light-dark()` gives both
+   themes from ONE declaration (the browser picks by color-scheme), so a component never
+   hardcodes a hex value and the page follows the OS theme for free. */
+:root {
+  color-scheme: light dark;
+  --ag-chrome: light-dark(#16233a, #0c1320);
+  --ag-chrome-text: #e8eef9;
+  --ag-canvas: light-dark(#f4f6fa, #0e1420);
+  --ag-surface: light-dark(#ffffff, #161d2b);
+  --ag-surface-2: light-dark(#f7f9fc, #1b2333);
+  --ag-line: light-dark(#dde3ec, #2a3547);
+  --ag-text: light-dark(#1c2536, #e7ecf5);
+  --ag-muted: light-dark(#5b6b82, #93a3bb);
+  --ag-primary: light-dark(#2563eb, #5b8cff);
+  --ag-ok: light-dark(#0f7a50, #34d399);
+  --ag-bad: light-dark(#bb2735, #f87171);
+  --ag-warn: light-dark(#9a5b00, #fbbf24);
+  --ag-tool: light-dark(#0f766e, #2dd4bf);
+  --ag-llm: light-dark(#4f46e5, #818cf8);
+  --ag-radius: 10px;
+  --ag-shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 4px 12px rgba(16, 24, 40, .05);
+}
+
 * { box-sizing: border-box; }
 body {
   margin: 0; font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-  background: #f4f6f9; color: #1f2933; font-size: 14px;
+  background: var(--ag-canvas); color: var(--ag-text); font-size: 14px;
 }
 #app { min-height: 100vh; }
 
 header.topbar {
   display: flex; align-items: center; gap: 18px; padding: 0 20px;
-  background: #16324f; color: #fff; height: 50px; position: sticky; top: 0; z-index: 10;
+  background: var(--ag-chrome); color: var(--ag-chrome-text);
+  height: 50px; position: sticky; top: 0; z-index: 10;
 }
 .topbar .brand { font-weight: 700; font-size: 16px; letter-spacing: .5px; }
 .topbar nav a { color: #cfe0f0; text-decoration: none; margin-right: 14px; padding: 4px 2px; }
@@ -20,10 +44,12 @@ header.topbar {
 }
 main.page { max-width: 1200px; margin: 18px auto 60px; padding: 0 16px; }
 h2.page-title { font-size: 19px; margin: 6px 0 14px; }
-h3.section-title { font-size: 15px; margin: 20px 0 8px; color: #334e68; }
+h3.section-title { font-size: 15px; margin: 20px 0 8px; color: var(--ag-text); }
 
-.card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; }
-.card h4 { margin: 0 0 10px; font-size: 14px; color: #334e68; }
+.card { background: var(--ag-surface); border: 1px solid var(--ag-line);
+        border-radius: var(--ag-radius); padding: 13px 15px; margin-bottom: 12px;
+        box-shadow: var(--ag-shadow); }
+.card h4 { margin: 0 0 10px; font-size: 13.5px; color: var(--ag-text); }
 
 .btn {
   display: inline-block; border: 1px solid #cbd5e0; background: #fff; color: #243b53;
@@ -38,12 +64,14 @@ h3.section-title { font-size: 15px; margin: 20px 0 8px; color: #334e68; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 
 .tbl-wrap { overflow-x: auto; }
-table.tbl { width: 100%; border-collapse: collapse; background: #fff; }
-.tbl th, .tbl td { border-bottom: 1px solid #e6edf3; padding: 7px 10px; text-align: left; vertical-align: top; }
-.tbl th { background: #f8fafc; font-weight: 600; color: #486581; font-size: 13px; white-space: nowrap; }
+table.tbl { width: 100%; border-collapse: collapse; background: var(--ag-surface); }
+.tbl th, .tbl td { border-bottom: 1px solid var(--ag-line); padding: 7px 10px; text-align: left;
+                   vertical-align: top; }
+.tbl th { background: var(--ag-surface-2); font-weight: 600; color: var(--ag-muted);
+          font-size: 12.5px; white-space: nowrap; }
 .tbl th.sortable { cursor: pointer; user-select: none; }
 .tbl th.sortable:hover { color: #2563eb; }
-.tbl tr:hover td { background: #fbfdff; }
+.tbl tr:hover td { background: var(--ag-surface-2); }
 
 /* custom dropdown (components/Sel.vue): control + attached in-page option list */
 .sel {

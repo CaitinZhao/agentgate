@@ -2,6 +2,8 @@
 its own evidence contradicts, and a run with nothing judged must not print a total."""
 import json
 
+import pytest
+
 from agentgate.analysis.scores import score_run, total_score
 from agentgate.result.consistency import check_artifacts, check_summary
 
@@ -316,3 +318,88 @@ def test_localization_tables_have_no_broken_backreferences():
             assert chr(1) not in repl and chr(2) not in repl, (
                 "%s: replacement %r contains a control character where a backreference "
                 "belongs" % (name, repl))
+
+
+# ---------------- execution view aggregation (the overview page's data) ----------------
+
+def test_run_view_aggregates_time_loops_and_signals(tmp_path):
+    """The overview shows numbers the per-case tables cannot: where the wall time went,
+    what loops cost, which dimension loses the most. Each must come from the archive."""
+    import json as _j
+    from agentgate.analysis.run_view import build
+    rd = tmp_path / "run"
+    rd.mkdir()
+    (rd / "scores.json").write_text(_j.dumps({
+        "total": 80.0, "scored": True,
+        "counts": {"pass": 1, "fail": 1, "pending": 0, "skipped": 0, "total": 2, "judged": 2},
+        "run_scores": {"success": 50.0, "quality": 90.0, "reliability": 80.0,
+                       "stability": None, "efficiency": 70.0, "cost": 60.0, "safety": 100.0},
+        "signal_totals": {"success": 1, "reliability": 12, "efficiency": 3},
+        "per_case": [
+            {"case_id": "a", "verdict": "PASS", "tokens": 1000, "wall_s": 5.0,
+             "model_calls": 2, "tool_calls": 3,
+             "scores": {"safety": 100.0, "success": 100.0}},
+            {"case_id": "b", "verdict": "FAIL", "tokens": 9000, "wall_s": 9.0,
+             "model_calls": 4, "tool_calls": 6,
+             "scores": {"safety": 100.0, "success": 0.0}},
+        ],
+        "cards": {"reliability": {"score": 80.0, "signals": [
+            {"case_id": "b", "note": "possible loop: search x3 (consecutive, args unrecorded)"}]}},
+    }), encoding="utf-8")
+    (rd / "spans_raw.json").write_text(_j.dumps([
+        {"task_id": "a", "spans": [
+            {"name": "llm.call", "start_unix_nano": 0, "end_unix_nano": 3_000_000_000,
+             "attributes": {"llm.model": "m", "llm.usage.total_tokens": 900}},
+            {"name": "tool.execute", "start_unix_nano": 3_000_000_000,
+             "end_unix_nano": 3_500_000_000, "attributes": {"tool.name": "search"}},
+        ]},
+        {"task_id": "b", "spans": [
+            {"name": "llm.call", "start_unix_nano": 0, "end_unix_nano": 8_000_000_000,
+             "attributes": {"llm.model": "m"}},
+            {"name": "tool.execute", "start_unix_nano": 8_000_000_000,
+             "end_unix_nano": 8_100_000_000, "attributes": {"tool.name": "search"}},
+            {"name": "tool.execute", "start_unix_nano": 8_100_000_000,
+             "end_unix_nano": 8_200_000_000, "attributes": {"tool.name": "search"}},
+            {"name": "tool.execute", "start_unix_nano": 8_200_000_000,
+             "end_unix_nano": 8_300_000_000, "attributes": {"tool.name": "search"}},
+        ]},
+    ]), encoding="utf-8")
+    (rd / "runs_meta.json").write_text(_j.dumps([
+        {"task_id": "a", "usage_tokens": 1000}, {"task_id": "b", "usage_tokens": 9000}]),
+        encoding="utf-8")
+
+    v = build(rd)
+    # time split comes from the spans, not from a wall-clock guess
+    assert v["metrics"]["llm_s"] == pytest.approx(11.0, abs=0.1)
+    assert v["metrics"]["tool_s"] == pytest.approx(0.8, abs=0.1)
+    assert v["metrics"]["llm_share"] > 90
+    # loop cost: case b has 3 consecutive search calls, a does not
+    assert v["loop"]["cases"] == 1 and v["loop"]["groups"] == 1
+    assert v["loop"]["token_avg_loop"] == 9000 and v["loop"]["token_avg_clean"] == 1000
+    # signal counts use the FULL totals, not the truncated card list (which had 1)
+    assert v["signal_count"]["reliability"] == 12
+    # a null dimension carries a reason (never a bare null)
+    assert all(d.get("reason") for d in v["score_dims"] if d["score"] is None)
+    assert v["timings_measured"] == 2
+
+
+def test_run_view_reports_gaps_instead_of_zeros(tmp_path):
+    """A missing input must surface as a declared gap, never as a zero metric."""
+    import json as _j
+    from agentgate.analysis.run_view import build
+    rd = tmp_path / "run2"
+    rd.mkdir()
+    (rd / "scores.json").write_text(_j.dumps({
+        "total": None, "scored": False,
+        "counts": {"pass": 0, "fail": 0, "pending": 2, "skipped": 0, "total": 2, "judged": 0},
+        "run_scores": {"success": None, "quality": None, "reliability": None,
+                       "stability": None, "efficiency": None, "cost": None, "safety": None},
+        "per_case": [{"case_id": "a", "verdict": "PENDING", "tokens": 0, "wall_s": 1.0},
+                     {"case_id": "b", "verdict": "PENDING", "tokens": 0, "wall_s": 1.0}],
+    }), encoding="utf-8")
+    v = build(rd)
+    assert v["metrics"]["total_score"] is None
+    assert v["metrics"]["no_score_note"]           # the honesty note is carried through
+    assert v["metrics"]["llm_s"] is None           # no spans -> not measured, not 0
+    assert set(v["data_gaps"]) >= {"no_llm_calls", "no_native", "no_spans"}
+    assert all(d.get("reason") for d in v["score_dims"])

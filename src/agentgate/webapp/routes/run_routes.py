@@ -714,6 +714,24 @@ def bank_trend(name: str, user: dict = Depends(auth.require_min("member")),
     return {"trend": list(reversed(out))}
 
 
+@router.get("/runs/{run_id}/view")
+def run_view(run_id: str, user: dict = Depends(auth.require_min("member"))):
+    """Aggregated execution view for the overview page.
+
+    The artifacts hold everything needed to answer "where did the time go / what did it
+    cost / what went wrong", but those answers require aggregation ACROSS cases, which the
+    per-case prose in the report never provides. This endpoint returns the aggregated
+    metrics, per-dimension signal counts, loop cost, time split and per-case execution
+    rows, so the page renders numbers instead of asking the reader to add up 150 rows.
+    """
+    run = _get_own_or_admin_run(run_id, user)
+    rd = Path(run["result_dir"] or "")
+    if not rd.is_dir():
+        raise HTTPException(404, "no archived results for this run")
+    from ...analysis import run_view as _rv
+    return _rv.build(rd)
+
+
 @router.get("/runs/{run_id}/report")
 def run_report(run_id: str, lang: str = "zh", user: dict = Depends(auth.require_min("member"))):
     run = _get_own_or_admin_run(run_id, user)

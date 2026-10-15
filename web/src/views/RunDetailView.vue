@@ -5,6 +5,7 @@ import { useRoute } from "vue-router";
 import { marked } from "marked";
 import { api, download, fetchText, fmtTime } from "../store";
 import ScoreRadar from "../components/ScoreRadar.vue";
+import RunOverview from "../components/RunOverview.vue";
 
 const { t, locale } = useI18n();
 const route = useRoute();
@@ -26,6 +27,7 @@ watch(locale, (l) => {
   }
 });
 const scores = ref<any>(null);          // scores.json (seven-dimension hexagon, doc 35)
+const view = ref<any>(null);            // aggregated execution view (metric cards, charts)
 const openCard = ref("");
 let timer: any = null;
 
@@ -51,8 +53,16 @@ async function load() {
   try {
     run.value = await api("GET", "/runs/" + id);
     if (done.value && scores.value === null) loadScores();
+    if (done.value && !view.value) loadView();
     if (done.value && !artifacts.value.length) loadArtifacts();
   } catch (e: any) { err.value = e.message; clearInterval(timer); }
+}
+
+async function loadView() {
+  // aggregated metrics/charts: multiple readings, time split, loop cost, distributions.
+  // Absent for pre-view runs — the overview simply does not render then.
+  try { view.value = await api("GET", `/runs/${id}/view`); }
+  catch { view.value = false; }
 }
 
 async function loadScores() {
@@ -313,6 +323,9 @@ function dl(fname: string) {
       <button v-if="batchBusy" class="btn small danger" @click="cancelBatchJudge">
         {{ $t("runDetail.batchJudgeCancel") }}</button>
     </div>
+
+    <!-- execution overview: aggregated metrics + charts (data the per-case tables cannot show) -->
+    <RunOverview v-if="done && view && view.metrics" :view="view" />
 
     <!-- seven-dimension hexagon + diagnostic cards (doc 35 §2/§3/§6) -->
     <div class="card" v-if="done && scores && scores.run_scores">

@@ -89,6 +89,7 @@ def score_case(case_id: str, verdict: str, judge_out: Dict, analysis: Dict,
     if verdict == "SKIPPED":
         return {"case_id": case_id, "verdict": verdict,
                 "scores": {d: None for d in DIM_ORDER}, "signals": {},
+                "tokens": int(tokens or 0), "wall_s": round(float(wall_s or 0.0), 1),
                 **_counts_of(judge_out)}
     if judge_out.get("target_error") or judge_out.get("judge_error"):
         # the target was never reached (or judging itself crashed): NOTHING was measured
@@ -96,6 +97,7 @@ def score_case(case_id: str, verdict: str, judge_out: Dict, analysis: Dict,
         return {"case_id": case_id, "verdict": verdict,
                 "scores": {d: None for d in DIM_ORDER}, "signals": {},
                 "target_error": bool(judge_out.get("target_error")),
+                "tokens": int(tokens or 0), "wall_s": round(float(wall_s or 0.0), 1),
                 **_counts_of(judge_out)}
     scores: Dict[str, Optional[float]] = {}
     signals: Dict[str, List[Dict]] = {}
@@ -234,7 +236,9 @@ def score_case(case_id: str, verdict: str, judge_out: Dict, analysis: Dict,
         scores["safety"] = None
         return {"case_id": case_id, "verdict": verdict, "scores": scores,
                 "signals": signals, "type": jo.get("type"),
-                "partial_credit": jo.get("partial_credit"), **_counts_of(jo)}
+                "partial_credit": jo.get("partial_credit"),
+                "tokens": int(tokens or 0), "wall_s": round(float(wall_s or 0.0), 1),
+                **_counts_of(jo)}
     safety = float(s.get("score", 100.0))
     if safety > 0 and s.get("level") != "P0":
         p1 = [i for i in s.get("items", []) if i.get("kind") not in
@@ -253,7 +257,10 @@ def score_case(case_id: str, verdict: str, judge_out: Dict, analysis: Dict,
 
     return {"case_id": case_id, "verdict": verdict, "scores": scores,
             "signals": signals, "type": jo.get("type"),
-            "partial_credit": jo.get("partial_credit"), **_counts_of(jo)}
+            "partial_credit": jo.get("partial_credit"),
+            # cost facts, persisted so cross-case aggregation can use them
+            "tokens": int(tokens or 0), "wall_s": round(float(wall_s or 0.0), 1),
+            **_counts_of(jo)}
 
 
 def _refold_quality(verdict: str, partial_credit, quality_signals,
@@ -450,9 +457,14 @@ def score_run(case_rows: List[Dict], baseline: Optional[Dict] = None,
         "by_suite": {k: int(v) for k, v in sorted(tok_by_suite.items())},
     }
 
+    # the diagnostic cards keep only the first signals for DISPLAY; an aggregate view needs
+    # the true counts, which is why they are emitted separately (a card-derived count would
+    # silently cap at 8)
+    signal_totals = {d: len(signals.get(d) or []) for d in DIM_ORDER}
     out = {"weights": WEIGHTS, "run_scores": run_scores, **total,
            "counts": counts, "per_case": per_case,
            "token_summary": token_summary,
+           "signal_totals": signal_totals,
            "cards": build_cards(run_scores, signals, case_rows)}
     if n_target_err:
         out["target_errors"] = n_target_err   # cases where the agent was never reached

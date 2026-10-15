@@ -116,13 +116,26 @@ def check_artifacts(result_dir: str) -> Dict:
     spans_with_data = [s for s in spans if (s.get("spans") or [])]
     if spans_with_data:
         per_case = scores.get("per_case") or []
-        # any archived case that claims zero model calls while its span archive is non-empty
-        model_claims = [c for c in per_case if (c.get("model_calls") == 0)]
-        if model_claims or not per_case:
+        # A case archived as "0 model calls" while the span evidence shows LLM activity is
+        # the original bug (report stating a fact its own evidence contradicts). The count
+        # is read from the ARCHIVE (per_case.model_calls, persisted by the scorer); a case
+        # with no such field cannot be checked and must not silently pass as consistent.
+        zero_claims = [c.get("case_id") for c in per_case
+                       if c.get("model_calls") == 0]
+        if zero_claims:
             findings.append(_finding(
                 "model_calls_contradiction", "error",
                 "%d archived case(s) report 0 model calls while spans_raw.json holds spans "
-                "for %d case(s)" % (len(model_claims) or 1, len(spans_with_data))))
+                "for %d case(s) (e.g. %s)" % (len(zero_claims), len(spans_with_data),
+                                              ", ".join(zero_claims[:3]))))
+        else:
+            unchecked = [c.get("case_id") for c in per_case if "model_calls" not in c]
+            if unchecked and len(unchecked) == len(per_case):
+                findings.append(_finding(
+                    "model_calls_unchecked", "warning",
+                    "no archived case carries a model-call count (%d cases): the model-call "
+                    "consistency check could not run — regenerate scores.json to enable it"
+                    % len(unchecked)))
     errors = [f for f in findings if f["severity"] == "error"]
     return {"ok": not errors, "degraded": bool(errors), "findings": findings,
             "n_errors": len(errors)}

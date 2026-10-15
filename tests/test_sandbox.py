@@ -58,6 +58,13 @@ def _response(final=None):
 # ---------- provider basics ----------
 
 def test_subprocess_provider_roundtrip():
+    # the POSIX commands below need a WORKING shell: resolve + probe it and skip (rather
+    # than fail) where bash does not actually run — e.g. Windows resolving the WSL launcher
+    # that exists but returns E_ACCESSDENIED. A passing test must not depend on the machine.
+    from agentgate.sandbox.subprocess_impl import bash_usable
+    if not bash_usable():
+        import pytest
+        pytest.skip("no usable POSIX shell here (subprocess provider falls back to cmd)")
     p = SubprocessSandboxProvider()
     h = p.create({"setup": [{"write_file": {"path": "in/task.txt", "content": "hello"}}]})
     try:

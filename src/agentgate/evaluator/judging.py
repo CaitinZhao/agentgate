@@ -383,9 +383,24 @@ def _check_final(case, response, pack: Dict, assets_roots=None,
         if sig and sig <= 2 and tol < 0.03:
             tol = 0.03
             quality["tol_widened_by_precision"] = sig
-        denom = abs(float(gold_v)) or 1.0
+        denom = abs(float(gold_v))
+        if denom == 0.0:
+            # a zero gold has no meaningful relative window: use an EXPLICIT absolute
+            # tolerance (tol_abs, default ±0.01) instead of the implicit |gold| or 1.0,
+            # so the reading is deliberate and documented rather than a silent side effect
+            abs_tol = float(gfinal.get("tol_abs", 0.01) or 0.01)
+            off = abs(float(v))
+            quality["abs_tol_applied"] = abs_tol
+            quality["final_margin"] = round(off / abs_tol, 3) if abs_tol else None
+            if off > abs_tol + 1e-9:
+                return False, results + [VerifierResult(ok=False, layer="L1", name="numeric",
+                    reason="gold is 0 (absolute tolerance ±%s), got %s" % (abs_tol, v),
+                    asi="金标为 0，按绝对容差 ±%s 判定，实际 %s" % (abs_tol, v),
+                    failed_step="final")], quality
+            return True, results, quality
         margin = abs(float(v) - float(gold_v)) / denom
-        quality["final_margin"] = round(margin / tol, 3) if tol > 0 else (0.0 if margin <= 1e-9 else 9.9)
+        quality["final_margin"] = (round(margin / tol, 3) if tol > 0
+                                   else (0.0 if margin <= 1e-9 else 9.9))
         if from_text:
             quality["value_from_text"] = True
         if margin > tol + 1e-9:

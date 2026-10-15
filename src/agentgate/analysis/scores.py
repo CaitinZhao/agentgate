@@ -231,9 +231,13 @@ def score_case(case_id: str, verdict: str, judge_out: Dict, analysis: Dict,
             {"case_id": case_id, "penalty": -100, "note": it.get("note", "")})
     scores["safety"] = round(max(0.0, min(100.0, safety)), 1)
 
+    n_model = (jo.get("process") or {}).get("n_model_calls")
     return {"case_id": case_id, "verdict": verdict, "scores": scores,
             "signals": signals, "type": jo.get("type"),
-            "partial_credit": jo.get("partial_credit")}
+            "partial_credit": jo.get("partial_credit"),
+            # trace-sourced counts persisted for the artifact consistency guard
+            "model_calls": n_model if n_model is not None else None,
+            "tool_calls": (jo.get("process") or {}).get("n_tool_calls")}
 
 
 def _refold_quality(verdict: str, partial_credit, quality_signals,
@@ -351,7 +355,17 @@ def score_run(case_rows: List[Dict], baseline: Optional[Dict] = None,
     n_pass = n_fail = n_pending = n_skipped = n_target_err = 0
     for row in case_rows:
         verdict = row.get("verdict", "FAIL")
-        sc = score_case(row.get("case_id", ""), verdict, row.get("judge_out") or {},
+        jo = row.get("judge_out") or {}
+        proc = jo.get("process") or {}
+        if proc.get("n_model_calls") is None:
+            # the production path always fills process, but a replayed/legacy row may carry
+            # counts only in its analysis — merge them so the guard sees the real number.
+            # NOTE: `is None`, not falsiness — a legitimate 0 must survive (treating it as
+            # missing is what made the model-call contradiction check un-fireable).
+            an = row.get("analysis") or {}
+            jo = dict(jo, process=dict(proc, n_model_calls=an.get("n_model_calls"),
+                                       n_tool_calls=an.get("n_tool_calls")))
+        sc = score_case(row.get("case_id", ""), verdict, jo,
                         row.get("analysis") or {}, tokens=row.get("tokens", 0),
                         wall_s=row.get("wall_s", 0.0),
                         stability=row.get("stability"), baseline=baseline)

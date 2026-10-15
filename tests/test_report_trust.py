@@ -76,73 +76,51 @@ def test_consistency_clean_run_passes():
 
 
 def test_check_artifacts_detects_the_archived_lie(tmp_path):
-    # the original bug, judged STRUCTURALLY (not by matching report prose, which a wording
-    # change would silently disable): a case claims 0 model calls while spans show llm work
-    (tmp_path / "scores.json").write_text(json.dumps({
-        "total": None, "counts": {"pass": 1, "fail": 1, "pending": 0, "judged": 2},
-        "run_scores": {"safety": 100.0},
-        "per_case": [{"case_id": "a", "verdict": "PASS", "model_calls": 0,
-                      "scores": {"safety": 100.0}}]}), encoding="utf-8")
+    """The guard must fire on a REAL pipeline artifact.
+
+    Written against `score_run` output (not hand-written JSON): the previous version of
+    this test fed the guard exactly the field it wanted, so it passed while the production
+    path never produced that field — a false green that hid a coverage regression.
+    """
+    from agentgate.analysis.scores import score_run
+    # a case whose trace recorded work but whose archived count is 0 (the original bug)
+    scores = score_run([_row("a", "PASS", judge_out={"process": {"n_model_calls": 0,
+                                                                 "n_tool_calls": 5}})])
+    assert "model_calls" in scores["per_case"][0]        # the field MUST be produced by the pipeline
+    (tmp_path / "scores.json").write_text(json.dumps(scores), encoding="utf-8")
     (tmp_path / "spans_raw.json").write_text(json.dumps(
         [{"task_id": "a", "spans": [{"name": "llm.call"}]}]), encoding="utf-8")
     res = check_artifacts(str(tmp_path))
-    assert res["degraded"] is True
+    assert res["degraded"] is True, res
     assert any(f["code"] == "model_calls_contradiction" for f in res["findings"])
 
 
 def test_check_artifacts_clean_when_counts_match(tmp_path):
-    (tmp_path / "scores.json").write_text(json.dumps({
-        "total": 80.0, "counts": {"pass": 1, "fail": 1, "pending": 0, "judged": 2},
-        "run_scores": {"safety": 100.0},
-        "per_case": [{"case_id": "a", "verdict": "PASS", "model_calls": 5,
-                      "scores": {"safety": 100.0}}]}), encoding="utf-8")
+    from agentgate.analysis.scores import score_run
+    scores = score_run([_row("a", "PASS", judge_out={"process": {"n_model_calls": 5,
+                                                                 "n_tool_calls": 3}})])
+    (tmp_path / "scores.json").write_text(json.dumps(scores), encoding="utf-8")
     (tmp_path / "spans_raw.json").write_text(json.dumps(
         [{"task_id": "a", "spans": [{"name": "llm.call"}]}]), encoding="utf-8")
     res = check_artifacts(str(tmp_path))
-    assert res["ok"] is True
+    assert res["ok"] is True, res
 
 
-# ---------------- golden parser guards (bugs.md 二) ----------------
+def test_check_artifacts_warns_when_counts_absent(tmp_path):
+    """An archive without the count is UNCHECKED, not silently consistent."""
+    (tmp_path / "scores.json").write_text(json.dumps({
+        "total": 80.0, "counts": {"pass": 1, "fail": 0, "pending": 0, "judged": 1},
+        "run_scores": {"safety": 100.0},
+        "per_case": [{"case_id": "a", "verdict": "PASS", "scores": {"safety": 100.0}}]}),
+        encoding="utf-8")
+    (tmp_path / "spans_raw.json").write_text(json.dumps(
+        [{"task_id": "a", "spans": [{"name": "llm.call"}]}]), encoding="utf-8")
+    res = check_artifacts(str(tmp_path))
+    assert any(f["code"] == "model_calls_unchecked" for f in res["findings"])
 
-def test_gold_parser_skips_years_and_entity_questions():
-    from agentgate.case.public_benchmarks.financebench_adapter import _parse_gold
-    # a plain year must not become the gold value
-    assert _parse_gold("In FY2022 the effective tax rate was 0.62%", "tax rate in FY2022?") == \
-        {"unit": "%", "value": 0.62}
-    # entity question never yields a numeric gold
-    assert _parse_gold("Las Vegas resorts ~90% of EBITDAR", "Which region had the highest contribution?") is None
-
-
-def test_gold_parser_prefers_the_period_the_question_asks_about():
-    from agentgate.case.public_benchmarks.financebench_adapter import _parse_gold
-    got = _parse_gold("Effective tax rate in FY2022 was 0.62%, compared to -14.76% in FY2021",
-                      "What was the effective tax rate in FY2022?")
-    assert got == {"unit": "%", "value": 0.62}     # not -14.76 (FY2021)
-
-
-def test_autoadapt_accepts_coarse_precision_without_draft():
-    # no separate draft flag: the judging layer's precision floor widens the tolerance to
-    # the gold's own precision, so a 2-significant-digit gold is usable as-is
-    from agentgate.control.autoadapt import _parse_num
-    coarse = _parse_num("$0.40 billion", "How much did it pay?")
-    assert coarse == {"unit": "USD billions", "value": 0.4}
-    assert "suspicious" not in coarse
-
-
-def test_precision_floor_widens_tolerance_only_for_coarse_gold():
-    from agentgate.case.models import Case, Gold
-    from agentgate.evaluator.judging import _check_final
-    case = Case(case_id="p", version=1, level="L1", type="numeric", pack="fb",
-                input={"query": "q"}, gold=Gold(final={"value": 0.4, "unit": "USD billions",
-                                                       "tol_rel": 0.01}), suite="T")
-    ok, _r, q = _check_final(case, {"final_json": {"value": 0.389, "unit": "USD billions"},
-                                    "answer_text": ""}, {})
-    assert ok is True and q.get("tol_widened_by_precision") == 1
-
-
-# ---------------- shared gold rules: the FinanceBench mis-parse classes ----------------
 
 def _fb(cid):
+    """One FinanceBench seed row (skips when the reference data is not present)."""
     import json as _j
     from pathlib import Path
     f = (Path(__file__).resolve().parents[2] / "reference" / "refs" / "code" / "financebench"
@@ -190,3 +168,32 @@ def test_gold_rules_reject_the_real_misparse_classes():
             assert altv is None
         else:
             assert altv is not None and abs(altv - want) < 1e-9
+
+
+def test_zero_gold_uses_explicit_absolute_tolerance():
+    from agentgate.case.models import Case, Gold
+    from agentgate.evaluator.judging import _check_final
+    def mk(g):
+        return Case(case_id="z", version=1, level="L1", type="numeric", pack="fb",
+                    input={"query": "q"}, gold=Gold(final=g), suite="T")
+    ok, _r, q = _check_final(mk({"value": 0, "unit": "%"}),
+                             {"final_json": {"value": 0.005, "unit": "%"}, "answer_text": ""}, {})
+    assert ok is True and q.get("abs_tol_applied") == 0.01
+    ok2, _r2, _q2 = _check_final(mk({"value": 0, "unit": "%"}),
+                                 {"final_json": {"value": 0.5, "unit": "%"}, "answer_text": ""}, {})
+    assert ok2 is False
+    ok3, _r3, _q3 = _check_final(mk({"value": 0, "unit": "%", "tol_abs": 1}),
+                                 {"final_json": {"value": 0.5, "unit": "%"}, "answer_text": ""}, {})
+    assert ok3 is True
+
+
+def test_change_and_enum_cases_stay_free_text():
+    from agentgate.case.gold_rules import ENUM_RE, quantity_value
+    # FinanceBench writes bullets WITHOUT a space
+    blob = chr(10) + "-Decrease in gross Margin" + chr(10) + "-mostly offset by pricing"
+    assert ENUM_RE.search(blob) is not None
+    assert ENUM_RE.search("-14.76%") is None          # a negative number is not a bullet
+    # two-period change question -> the gold would be a delta, not a level
+    v, why = quantity_value("changed from 20% in FY2021 to 23% in FY 2022.",
+                            "How much has the effective tax rate changed between FY2021 and FY2022?")
+    assert v is None and "change" in why

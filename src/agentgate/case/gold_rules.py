@@ -26,8 +26,16 @@ DATE_CTX_RE = re.compile(
     r"|as of|ended|ending|fiscal year end|年\s*\d|\d{4}年)", re.I)
 ORDINAL_AFTER_RE = re.compile(r"^\s*(st|nd|rd|th)\b", re.I)
 # a bulleted/numbered list is an enumeration, not a single value. A leading minus on a
-# bare figure ("-14.76%") must NOT be read as a bullet.
-ENUM_RE = re.compile(r"^\s*(?:[-*•]\s+|\d{1,2}[.)]\s|[•*]\s*)\S", re.M)
+# bare figure ("-14.76%") must NOT be read as a bullet, but FinanceBench writes bullets
+# WITHOUT a space ("\n-Decrease in gross Margin"): a bullet is "-"/"*"/"•" at line start
+# followed by a NON-digit, or a numbering prefix ("1. ", "2) ").
+ENUM_RE = re.compile(r"^\s*(?:[-*•](?!\d)|\d{1,2}[.)]\s|[*•]\s*)\S", re.M)
+# "how much has X changed", "has X improved or declined": the answer states a DELTA or a
+# direction while carrying both periods' levels — a single figure picked from it is wrong
+CHANGE_Q_RE = re.compile(
+    r"\b(change[d]?|increase[d]?|decrease[d]?|improve[d]?|decline[d]?|growth|grew|"
+    r"dropped?|rise|rose|difference|delta)\b"
+    r"|变化|对比", re.I)
 
 
 def _date_adjacent(a: str, m) -> bool:
@@ -55,6 +63,14 @@ def quantity_value(answer: str, question: str) -> Tuple[Optional[float], Optiona
         return None, "yes/no question"
     if ENUM_RE.search(a):
         return None, "enumeration"
+    # a change/direction question whose answer recites TWO periods' levels: the gold is a
+    # delta (or a direction), not either level — picking one is how "changed from 20% in
+    # FY2021 to 23% in FY 2022" became 20 (the FY2021 level). Refuse; the reference answer
+    # still lets the AI/human judge it.
+    if CHANGE_Q_RE.search(q):
+        _years = {m.group(1) for m in FY_RE.finditer(q)}
+        if len(_years) >= 2:
+            return None, "change question with two periods (delta, not a level)"
     # a bare number carrying the whole answer ("77.78") is unambiguous by construction
     bare = NUM_RE.fullmatch(a.strip())
     if bare:

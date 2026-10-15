@@ -256,6 +256,7 @@ def run_case_set(cases_dir, target, out_dir, receiver_port: int = 4318,
                                                "results/llm_calls/current.jsonl")
     repeat_k = max(1, int(repeat_k or 1))
     cancelled = False
+    _t_start = _time.time()               # the run's own window (distinct from report time)
     try:
         for case in cases:
             if cancel_check is not None and cancel_check():
@@ -500,7 +501,12 @@ def run_case_set(cases_dir, target, out_dir, receiver_port: int = 4318,
         scores["degraded"] = True
     (out / "scores.json").write_text(
         json.dumps(scores, ensure_ascii=False, indent=1), encoding="utf-8")
-    meta = {"time": datetime.datetime.now().isoformat(timespec="seconds"),
+    _now_iso = datetime.datetime.now().isoformat(timespec="seconds")
+    meta = {"time": _now_iso,
+            # the run window is a different fact from the report time: record both so
+            # the header can show when the evaluation actually ran
+            "started_at": datetime.datetime.fromtimestamp(_t_start).isoformat(timespec="seconds"),
+            "finished_at": _now_iso,
             "target_errors": n_target_err,
             "level_rows": level_rows, "suite_rows": suite_rows,
             "analysis_rows": analysis_rows,

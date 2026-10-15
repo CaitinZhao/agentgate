@@ -66,6 +66,8 @@ def rebuild_base_reports(run: dict, out_dir: Path) -> dict:
             return rows
 
         meta = {"time": run.get("finished_at") or run.get("created_at") or "",
+                # the run's own window is a separate fact from the (re)build time
+                "started_at": run.get("started_at"), "finished_at": run.get("finished_at"),
                 "level_rows": _rows(byl), "suite_rows": _rows(bys),
                 "target": run.get("target_url", ""),
                 "model": (runs_meta[0].get("model") if runs_meta else "-"),

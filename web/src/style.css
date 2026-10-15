@@ -148,3 +148,8 @@ dialog.uc-dialog[open] {
 .pager { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
 .checkbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 13px; }
 .group-head td { background: #f1f5f9 !important; font-weight: 700; color: #334e68; }
+
+/* inline clickable identifiers (case_id in cards/tables): reads as a link, acts as a
+   button — the same affordance the items table already provides */
+a.link, .link { color: #2563eb; cursor: pointer; text-decoration: none; }
+a.link:hover, .link:hover { text-decoration: underline; }

@@ -4,15 +4,18 @@
 // always looks attached, survives overflow containers, and is styleable.
 import { nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 
+// the option VALUE is generic: most call sites bind a string, the yes/no toggles in the
+// user center bind a boolean (ai.judge_auto). Typing it as string forced a cast at every
+// boolean call site and made a real type error invisible.
 const props = withDefaults(defineProps<{
-  modelValue: string;
-  options: { value: string; label: string }[];
+  modelValue: string | boolean;
+  options: { value: string | boolean; label: string }[];
   small?: boolean;        // compact variant for table rows
   placeholder?: string;   // shown when modelValue is "" or unmatched
   minWidth?: string;
 }>(), { small: false, placeholder: "", minWidth: "" });
 
-const emit = defineEmits<{ (e: "update:modelValue", v: string): void }>();
+const emit = defineEmits<{ (e: "update:modelValue", v: string | boolean): void }>();
 
 const open = ref(false);
 const btn = ref<HTMLElement | null>(null);
@@ -21,7 +24,8 @@ const pos = ref({ top: 0, left: 0, minWidth: 0 });
 
 function currentLabel(): string {
   const hit = props.options.find((o) => o.value === props.modelValue);
-  return hit ? hit.label : (props.placeholder || props.modelValue || "-");
+  return hit ? hit.label
+    : (props.placeholder || String(props.modelValue ?? "") || "-");
 }
 
 function place() {
@@ -41,7 +45,7 @@ function toggle() {
   if (open.value) place();
 }
 
-function pick(v: string) {
+function pick(v: string | boolean) {
   emit("update:modelValue", v);
   open.value = false;
 }
@@ -84,7 +88,7 @@ onBeforeUnmount(() => {
     <div v-if="open" ref="pop" class="sel-pop"
          :style="{ top: pos.top + 'px', left: pos.left + 'px',
                    minWidth: (pos.minWidth || 120) + 'px', maxWidth: '320px' }">
-      <div v-for="o in options" :key="o.value" class="sel-opt"
+      <div v-for="o in options" :key="String(o.value)" class="sel-opt"
            :class="{ active: o.value === modelValue }" @click="pick(o.value)">
         {{ o.label }}
       </div>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute } from "vue-router";
 import { marked } from "marked";
@@ -16,6 +16,15 @@ const tab = ref<"items" | "report" | "analysis" | "artifacts">("items");
 const reportText = ref("");
 const analysisText = ref("");
 const reportLang = ref<"zh" | "en">(locale.value === "en" ? "en" : "zh");
+// keep the report language tied to the UI locale: without this, switching the top bar
+// left the report in the previous language while the same screen's ASI switched over
+watch(locale, (l) => {
+  const want = l === "en" ? "en" : "zh";
+  if (reportLang.value !== want) {
+    reportLang.value = want;
+    if (reportText.value) showReport(want);      // refresh an already-loaded report
+  }
+});
 const scores = ref<any>(null);          // scores.json (seven-dimension hexagon, doc 35)
 const openCard = ref("");
 let timer: any = null;
@@ -29,13 +38,20 @@ function md(src: string): string {
 const done = computed(() =>
   run.value && ["succeeded", "failed", "cancelled"].includes(run.value.status));
 
-const ARTIFACTS = ["eval_results.json", "runs_meta.json", "failures.jsonl",
-  "spans_raw.json", "llm_calls_raw.json", "scores.json", "judge.jsonl"];
+// the archived files are conditional (failures.jsonl only when something failed,
+// llm_calls_raw.json only with message-level recording), so the buttons come from the
+// server's actual listing — a hardcoded set offered downloads that 404'd.
+const artifacts = ref<string[]>([]);
+async function loadArtifacts() {
+  try { artifacts.value = (await api("GET", `/runs/${id}/artifacts`)).files || []; }
+  catch { artifacts.value = []; }
+}
 
 async function load() {
   try {
     run.value = await api("GET", "/runs/" + id);
     if (done.value && scores.value === null) loadScores();
+    if (done.value && !artifacts.value.length) loadArtifacts();
   } catch (e: any) { err.value = e.message; clearInterval(timer); }
 }
 
@@ -151,7 +167,8 @@ async function cancelBatchJudge() {
 }
 
 async function review(it: any, verdict: "PASS" | "FAIL") {
-  const note = reviewNote.value[it.case_id] || (verdict === "PASS" ? "采纳 judge 建议" : "人工复核不通过");
+  const note = reviewNote.value[it.case_id]
+    || t(verdict === "PASS" ? "runDetail.noteAdopt" : "runDetail.noteReject");
   try {
     await api("POST", `/runs/${id}/review`, { case_id: it.case_id, verdict, note });
     closeCaseDetail();
@@ -267,11 +284,23 @@ function dl(fname: string) {
       <div class="muted" style="margin-top: 6px" v-if="run.gate_decision">
         {{ $t("runDetail.gate") }}: <b :title="$t('runDetail.pendingHint')">{{ run.gate_decision }}</b>
         <template v-if="run.score"> · {{ $t("runDetail.autoScore") }}: {{ run.score }}</template>
-        <template v-if="run.scheduled_for"> · scheduled: {{ fmtTime(run.scheduled_for) }}</template>
+        <template v-if="run.scheduled_for"> · {{ $t("runDetail.scheduled") }}: {{ fmtTime(run.scheduled_for) }}</template>
       </div>
     <div class="muted" v-if="String(run.gate_decision || '').startsWith('PENDING')">
       {{ $t("runDetail.pendingHint") }}
     </div>
+    </div>
+
+    <div class="checkbar" style="margin-bottom: 10px">
+      <button class="btn small" :class="{ primary: tab === 'items' }" @click="switchTab('items')">{{ $t("runDetail.items") }}</button>
+      <button v-if="done" class="btn small" :class="{ primary: tab === 'report' }" @click="switchTab('report')">{{ $t("runDetail.tabReport") }}</button>
+      <button v-if="done" class="btn small" :class="{ primary: tab === 'analysis' }" @click="switchTab('analysis')">{{ $t("runDetail.tabAnalysis") }}</button>
+      <button v-if="done" class="btn small" :class="{ primary: tab === 'artifacts' }" @click="switchTab('artifacts')">{{ $t("runDetail.tabArtifacts") }}</button>
+      <button v-if="done && (run.items || []).some(i => i.verdict === 'PENDING')" class="btn small"
+              :disabled="batchBusy" @click="batchJudge">
+        ✨ {{ $t("runDetail.batchJudge") }}{{ batchBusy ? ` (${batchDone}/${batchTotal})` : "" }}</button>
+      <button v-if="batchBusy" class="btn small danger" @click="cancelBatchJudge">
+        {{ $t("runDetail.batchJudgeCancel") }}</button>
     </div>
 
     <!-- seven-dimension hexagon + diagnostic cards (doc 35 §2/§3/§6) -->
@@ -293,17 +322,18 @@ function dl(fname: string) {
           </div>
           <div class="checkbar" style="flex-wrap: wrap">
             <button v-for="(card, dim) in scores.cards" :key="dim" class="btn small"
-                    :class="{ primary: openCard === dim }" @click="openCard = openCard === dim ? '' : dim">
+                    :class="{ primary: openCard === String(dim) }" @click="openCard = openCard === String(dim) ? '' : String(dim)">
               {{ $t("scores.dim." + dim) }}: {{ card.score ?? "n/a" }}
             </button>
           </div>
-          <div v-for="(card, dim) in scores.cards" :key="'card' + dim" v-show="openCard === dim"
+          <div v-for="(card, dim) in scores.cards" :key="'card' + dim" v-show="openCard === String(dim)"
                style="border-top: 1px solid #e2e8f0; margin-top: 8px; padding-top: 8px">
             <div v-if="card.signals?.length">
               <b class="muted">{{ $t("scores.signals") }}</b>
               <ul style="margin: 4px 0">
                 <li v-for="(s, i) in card.signals" :key="i">
-                  <span class="mono muted">{{ s.case_id }}</span> — {{ s.note }}
+                  <a class="mono link" href="javascript:void(0)"
+                     @click="openCaseDetail(s.case_id)">{{ s.case_id }}</a> — {{ s.note }}
                 </li>
               </ul>
             </div>
@@ -311,7 +341,8 @@ function dl(fname: string) {
               <b class="muted">{{ $t("scores.worst") }}</b>
               <ul style="margin: 4px 0">
                 <li v-for="(w, i) in card.worst" :key="i">
-                  <span class="mono">{{ w.case_id }}</span> — {{ w.note }}
+                  <a class="mono link" href="javascript:void(0)"
+                     @click="openCaseDetail(w.case_id)">{{ w.case_id }}</a> — {{ w.note }}
                   <span v-if="w.asi" class="muted"> · ASI: {{ w.asi }}</span>
                 </li>
               </ul>
@@ -344,26 +375,19 @@ function dl(fname: string) {
           <tr v-for="n in nativeRows" :key="n.suite">
             <td class="mono">{{ n.suite }}</td>
             <td>{{ n.label }}</td>
-            <td><b>{{ n.rate ?? "n/a" }}</b><span class="muted">{{ n.family === 'airbench' ? '' : '%' }}</span></td>
+            <!-- same rule as the report: a rate over ZERO resolved cases is withheld, not
+                 printed as 0% (that reads as a measured "nothing succeeded") -->
+            <td v-if="n.rate === null && !n.resolved && n.total">
+              <span class="muted">{{ $t("scores.nativeWithheld") }}</span></td>
+            <td v-else><b>{{ n.rate ?? "n/a" }}</b><span class="muted">{{ n.family === 'airbench' ? '' : '%' }}</span></td>
             <td class="muted">{{ n.pass }}/{{ n.total }}
+              <span v-if="n.undecided" class="muted">· {{ n.undecided }} {{ $t("runDetail.pendingShort") }}</span>
               <span v-if="n.metrics" class="mono">
                 {{ Object.entries(n.metrics).map(([k, v]) => k + "=" + v).join(" · ") }}</span>
             </td>
           </tr>
         </tbody>
       </table>
-    </div>
-
-    <div class="checkbar" style="margin-bottom: 10px">
-      <button class="btn small" :class="{ primary: tab === 'items' }" @click="switchTab('items')">{{ $t("runDetail.items") }}</button>
-      <button v-if="done" class="btn small" :class="{ primary: tab === 'report' }" @click="switchTab('report')">{{ $t("runDetail.tabReport") }}</button>
-      <button v-if="done" class="btn small" :class="{ primary: tab === 'analysis' }" @click="switchTab('analysis')">{{ $t("runDetail.tabAnalysis") }}</button>
-      <button v-if="done" class="btn small" :class="{ primary: tab === 'artifacts' }" @click="switchTab('artifacts')">{{ $t("runDetail.tabArtifacts") }}</button>
-      <button v-if="done && (run.items || []).some(i => i.verdict === 'PENDING')" class="btn small"
-              :disabled="batchBusy" @click="batchJudge">
-        ✨ {{ $t("runDetail.batchJudge") }}{{ batchBusy ? ` (${batchDone}/${batchTotal})` : "" }}</button>
-      <button v-if="batchBusy" class="btn small danger" @click="cancelBatchJudge">
-        {{ $t("runDetail.batchJudgeCancel") }}</button>
     </div>
 
     <div class="tbl-wrap">
@@ -375,7 +399,8 @@ function dl(fname: string) {
         <th><span :title="$t('runDetail.asiHint')">{{ $t("runDetail.colAsi") }}</span></th><th></th>
       </tr></thead>
       <tbody>
-        <tr v-if="!run.items.length"><td colspan="9" class="muted">{{ $t("common.loading") }}</td></tr>
+        <tr v-if="!run.items.length"><td colspan="9" class="muted">
+          {{ done ? $t("runDetail.noItems") : $t("common.loading") }}</td></tr>
         <tr v-for="it in run.items" :key="it.case_id">
           <td class="mono"><a href="javascript:void(0)" class="link"
                               @click="openCaseDetail(it.case_id)">{{ it.case_id }}</a></td>
@@ -422,7 +447,7 @@ function dl(fname: string) {
       <div class="card">
         <h4>{{ $t("runDetail.artifactsHint") }}</h4>
         <div class="inline">
-          <button v-for="a in ARTIFACTS" :key="a" class="btn small mono" @click="dl(a)">{{ a }}</button>
+          <button v-for="a in artifacts" :key="a" class="btn small mono" @click="dl(a)">{{ a }}</button>
         </div>
       </div>
     </template>
@@ -440,7 +465,7 @@ function dl(fname: string) {
           <button class="btn small" @click="closeCaseDetail">{{ $t("common.close") }}</button>
         </div>
         <div class="muted" style="margin: 4px 0"><b>{{ $t("runDetail.dQuestion") }}</b></div>
-        <pre class="mono" style="max-height: 120px; overflow: auto; white-space: pre-wrap">{{ caseDetail.query || "(无题面记录)" }}</pre>
+        <pre class="mono" style="max-height: 120px; overflow: auto; white-space: pre-wrap">{{ caseDetail.query || $t("runDetail.noQuery") }}</pre>
         <div v-if="caseDetail.context_chars" class="muted" style="font-size: 12px">
           {{ $t("runDetail.dContext", { n: caseDetail.context_chars }) }}：{{ caseDetail.context_head }}…
         </div>
@@ -448,7 +473,7 @@ function dl(fname: string) {
           {{ JSON.stringify(caseDetail.input_extra) }}
         </div>
         <div class="muted" style="margin: 8px 0 4px"><b>{{ $t("runDetail.dAnswer") }}</b></div>
-        <pre class="mono" style="max-height: 220px; overflow: auto; white-space: pre-wrap">{{ caseDetail.answer || "(无回答归档)" }}</pre>
+        <pre class="mono" style="max-height: 220px; overflow: auto; white-space: pre-wrap">{{ caseDetail.answer || $t("runDetail.noAnswer") }}</pre>
         <div v-if="caseDetail.final_json && Object.keys(caseDetail.final_json).length" class="muted mono" style="font-size: 12px">
           FINAL: {{ JSON.stringify(caseDetail.final_json) }}
         </div>
@@ -524,7 +549,7 @@ function dl(fname: string) {
         <div v-if="goldFixErr" class="error-box">{{ goldFixErr }}</div>
         <div v-if="goldFixNote" class="ok-box">{{ goldFixNote }}</div>
         <div class="muted" style="margin: 6px 0">{{ $t("runDetail.fixGoldAnswer") }}:</div>
-        <pre class="mono" style="max-height: 140px; overflow: auto; white-space: pre-wrap">{{ goldFix.answer || "(无)" }}</pre>
+        <pre class="mono" style="max-height: 140px; overflow: auto; white-space: pre-wrap">{{ goldFix.answer || $t("runDetail.none") }}</pre>
         <div class="form-grid" style="margin-top: 8px">
           <div class="form-row"><label>{{ $t("runDetail.fixGoldType") }}</label>
             <select v-model="goldFixType">

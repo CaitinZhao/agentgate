@@ -16,8 +16,10 @@ export const router = createRouter({
     { path: "/runs", component: () => import("./views/RunsView.vue") },
     { path: "/runs/new", component: () => import("./views/RunCreateView.vue") },
     { path: "/runs/:id", component: () => import("./views/RunDetailView.vue") },
-    { path: "/reports", redirect: "/runs" },       // merged into the runs page (W6-18)
-    { path: "/admin", redirect: "/banks" },         // merged into the user center (W6-19)
+    // kept as redirects (not deleted): old bookmarks/links keep working, and the
+    // pages themselves were merged — the views are gone, the URLs are not
+    { path: "/reports", redirect: "/runs" },
+    { path: "/admin", redirect: "/banks" },
     { path: "/compare", component: () => import("./views/CompareView.vue") },
   ],
 });

@@ -6,9 +6,10 @@ the eval service writes both report.md (zh) and report-en.md (en).
 from typing import Dict, List
 
 _T = {
-    "zh": {"title": "FinEvalLab · L0 基线报告", "time": "时间", "target": "被测目标",
+    "zh": {"title": "FinEvalLab · L0 基线报告", "time": "报告生成时间", "target": "被测目标",
+           "run_window": "执行时间",
            "model": "模型", "bank": "题库版本", "cases": "题",
-           "gate": "门禁判定", "fails": "失败题", "score": "总分",
+           "gate": "门禁判定", "fails": "失败题", "score": "通过率",
            "score_note": "自动可判题 pass/total；PENDING 题不计入",
            "level": "分级", "total": "总数", "suite": "套件",
            "failures_lead": "错题集（详见 failures.jsonl）：",
@@ -16,9 +17,10 @@ _T = {
            "tokens": "tokens", "wall": "耗时s",
            "native": "原生口径（数据集自己的评分规则，便于与论文对比）",
            "footer": "评测只负责观测与判定；accept/reject/rollback 归演进控制平面。"},
-    "en": {"title": "FinEvalLab · Baseline Report", "time": "Time", "target": "Target",
+    "en": {"title": "FinEvalLab · Baseline Report", "time": "Report generated", "target": "Target",
+           "run_window": "Run window",
            "model": "Model", "bank": "Case bank version", "cases": "cases",
-           "gate": "Gate", "fails": "failed cases", "score": "Score",
+           "gate": "Gate", "fails": "failed cases", "score": "Pass rate",
            "score_note": "pass/total over auto-judgeable cases; PENDING excluded",
            "level": "Level", "total": "Total", "suite": "Suite",
            "failures_lead": "Failed cases (see failures.jsonl): ",
@@ -43,7 +45,17 @@ def build_report(results: List[Dict], gate: Dict, meta: Dict, lang: str = "zh") 
     lines = []
     lines.append("# %s" % t["title"])
     lines.append("")
-    lines.append("- %s%s%s" % (t["time"], colon, meta.get("time", "")))
+    # "time" is when THIS REPORT was generated; the run's own window is a different fact
+    # and used to be conflated with it (the label just said "时间"). Print both, in the
+    # same readability-first format the UI uses (no ISO "T").
+    def _fmt(ts):
+        return str(ts or "").replace("T", " ")
+    lines.append("- %s%s%s" % (t["time"], colon, _fmt(meta.get("time"))))
+    win = [w for w in (meta.get("started_at"), meta.get("finished_at")) if w]
+    if win:
+        label = t.get("run_window") or ("执行时间" if zh else "Run window")
+        lines.append("- %s%s%s" % (label, colon,
+                                   " ~ ".join(_fmt(w) for w in win)))
     lines.append("- %s%s%s%s" % (t["target"], colon, meta.get("target"),
                                 parens % (t["model"] + " " + meta.get("model", "-"))))
     lines.append("- %s%s%s%s" % (t["bank"], colon, meta.get("eval_set_version"),

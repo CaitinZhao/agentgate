@@ -534,6 +534,86 @@ def render_hexagon_table(run_scores: Dict, total: Dict, lang: str = "zh") -> Lis
     return lines
 
 
+# The scorer writes signal notes once, in English (they are also the machine-readable
+# record). The CHINESE report must not print English prose, so the render layer translates
+# the known note shapes; an unmatched note falls through unchanged rather than being lost.
+_NOTE_ZH = [
+    (r"value used over half of the tolerance", r"取值落在容差半程之外（勉强通过）"),
+    (r"sign differs from the gold; accepted by bank policy \(magnitude match, delta (\S+)\)", r"符号与金标相反，按题库口径接受（幅值一致，差值 \1）"),
+    (r"pack requires evidence; FINAL.evidence missing", r"领域包要求证据引用，但 FINAL 缺少 evidence"),
+    (r"pack requires caliber; FINAL.basis missing", r"领域包要求口径声明，但 FINAL 缺少 basis"),
+    (r"caliber does not match the allowed one", r"口径与允许值不符"),
+    (r"pack default key (\S+) missing", r"缺少领域包默认键 \1"),
+    (r"skipped retrieval: answered with 0 tool calls", r"跳步直答：未调用工具就作答"),
+    (r"possible loop: (\S+) x(\d+) \((.*)\)", r"疑似循环：工具 \1 调用 \2 次（\3）"),
+    (r"broken chain: (\d+) spans without a parent", r"轨迹断链：\1 个 span 缺少父节点"),
+    (r"blocked attempts: (.*)", r"被红线拦截的尝试：\1"),
+    (r"(\d+) model call errors", r"模型调用出错 \1 次"),
+    (r"inconsistent repeats \((.*)\) - outputs differ across runs", r"重复验证输出不一致（\1）"),
+    (r"(\d+) tool calls \(score drops above (\d+)\)", r"工具调用 \1 次（超过 \2 次开始扣分）"),
+    (r"(\d+) tokens \(zero above (\d+)\)", r"token \1（超过 \2 归零）"),
+]
+
+_NOTE_ZH_RE = [(__import__("re").compile(a), b) for a, b in _NOTE_ZH]
+
+
+_IMPROVE_ZH = [
+    (r"^Strengthen the profile prompt: retrieve/call tools before answering$",
+     "强化领域包提示词：先检索/调工具再作答"),
+    (r"^Same-args repeats: add \"retry only after changing arguments\" to the prompt$",
+     "同参数重复调用：在提示词里加\"参数变化后才重试\""),
+    (r"^Check the agent's span reporting \(parent spans missing\)$",
+     "检查被测 Agent 的 span 上报（存在缺失父节点的 span）"),
+    (r"^Attach FINAL\.evidence \(doc \+ page\) as the pack requires$",
+     "按领域包要求补上 FINAL.evidence（文档 + 页码）"),
+    (r"^Average ([\d.]+) tool calls per case: reduce repeated retrieval and dead branches$",
+     r"平均每题  次工具调用：减少重复检索与无效分支"),
+    (r"^High token usage: compress retrieval results and intermediate reasoning$",
+     "token 消耗偏高：压缩检索结果与中间推理"),
+    (r"^P0 safety signals: review every case manually; LLM must not clear safety items alone$",
+     "存在 P0 安全信号：逐题人工复核；AI 不得单独放行安全项"),
+    (r"^Fix per the failure attribution \(see the failed list\), then re-run the regression$",
+     "按失败题归因修复（见失败清单），再重跑回归"),
+]
+_IMPROVE_ZH_RE = [(__import__("re").compile(a), b) for a, b in _IMPROVE_ZH]
+
+
+def _improve_text(text: str, lang: str) -> str:
+    """Localize a build_cards improvement line (same rule as _note_text)."""
+    if lang != "zh" or not text:
+        return text
+    for rx, repl in _IMPROVE_ZH_RE:
+        if rx.match(text):
+            return rx.sub(repl, text)
+    return text
+
+
+def _note_text(note: str, lang: str) -> str:
+    """Localize a scorer-generated signal note for the report language.
+
+    Scorer notes are English one-liners (they double as the machine-readable record); a
+    Chinese report must not print them verbatim. Known shapes are translated here, and an
+    unrecognized note falls through UNCHANGED rather than disappearing — a new signal
+    showing up in English is a visible gap, a dropped one is silent data loss."""
+    if lang != "zh" or not note:
+        return note
+    # the loop note carries a nested criterion phrase; translate it in place first
+    detail = {
+        "consecutive, same args": "连续且参数相同",
+        "consecutive, args unrecorded": "连续（参数未记录）",
+        "non-consecutive": "非连续",
+    }
+    for rx, repl in _NOTE_ZH_RE:
+        m = rx.match(note)
+        if not m:
+            continue
+        out = rx.sub(repl, note)
+        if m.re.groups and m.group(m.re.groups) in detail:
+            out = out.replace(m.group(m.re.groups), detail[m.group(m.re.groups)])
+        return out
+    return note
+
+
 def render_cards(scores: Dict, lang: str = "zh") -> List[str]:
     """Six diagnostic cards -> markdown (signals / worst samples / improvements)."""
     t = _T.get(lang, _T["zh"])
@@ -543,23 +623,31 @@ def render_cards(scores: Dict, lang: str = "zh") -> List[str]:
         v = card.get("score")
         lines.append("### %s：%s" % (t[d], t["na"] if v is None else "%.0f" % v))
         lines.append("")
+        if not (card.get("signals") or card.get("worst") or card.get("improvements")):
+            # an empty heading reads as a rendering bug; the UI prints "no signals" for the
+            # same fact, so the report says it too
+            lines.append(("本维无扣分信号。" if lang == "zh" else "No penalty signals on this dimension."))
+            lines.append("")
+            continue
         if card.get("signals"):
             lines.append(("**扣分信号**" if lang == "zh" else "**Signals**") + "")
             for s in card["signals"]:
                 lines.append("- %s%s%s" % (s.get("case_id", ""),
-                                           "：" if lang == "zh" else ": ", s.get("note", "")))
+                                           "：" if lang == "zh" else ": ",
+                                           _note_text(s.get("note", ""), lang)))
         if card.get("worst"):
             lines.append("")
             lines.append(("**最差样本**" if lang == "zh" else "**Worst samples**") + "")
             for w in card["worst"]:
                 lines.append("- %s%s%s%s" % (w.get("case_id", ""),
-                                             "：" if lang == "zh" else ": ", w.get("note", ""),
+                                             "：" if lang == "zh" else ": ",
+                                             _note_text(w.get("note", ""), lang),
                                              (" | ASI: %s" % w["asi"]) if w.get("asi") else ""))
         if card.get("improvements"):
             lines.append("")
             lines.append(("**改进动作**" if lang == "zh" else "**Improvements**") + "")
             for im in card["improvements"]:
-                lines.append("- %s" % im)
+                lines.append("- %s" % _improve_text(im, lang))
         lines.append("")
     return lines
 

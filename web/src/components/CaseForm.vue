@@ -102,7 +102,7 @@ function payload() {
 }
 function submit() {
   if (!f.query.trim()) { alert(t("edit.queryRequired")); return; }
-  if (!f.case_id.trim() && !caseIdLocked) {
+  if (!f.case_id.trim() && !props.caseIdLocked) {
     f.case_id = "case-" + Date.now().toString(36);   // empty -> auto id
   }
   emit("submit", payload());
@@ -138,12 +138,12 @@ const showChecks = computed(() => f.type !== "free_text" || f.checkpoints.length
 // ---- AI rubric-point drafting: decompose the gold answer into checkable points ----
 const rubricBusy = ref(false);
 async function aiRubric() {
-  if (!bankName) return;
+  if (!props.bankName) return;
   rubricBusy.value = true;
   try {
     const answerText = [f.value, f.aliases, f.keywords].filter(Boolean).join("；")
       || aiMaterial.value || f.query;
-    const r = await api("POST", `/benchmarks/${bankName}/ai-rubric`,
+    const r = await api("POST", `/benchmarks/${props.bankName}/ai-rubric`,
                         { query: f.query, answer: answerText });
     if (r.rubric?.length) f.rubric = r.rubric.map((x: any) => ({ ...x }));
   } catch (e: any) { alert(e.message); }

@@ -710,6 +710,21 @@ def run_report(run_id: str, lang: str = "zh", user: dict = Depends(auth.require_
     return PlainTextResponse(p.read_text(encoding="utf-8"), media_type="text/markdown")
 
 
+@router.get("/runs/{run_id}/artifacts")
+def run_artifacts_list(run_id: str, user: dict = Depends(auth.require_min("member"))):
+    """The artifacts this run ACTUALLY archived (some are conditional: failures.jsonl only
+    when something failed, llm_calls_raw.json only with message-level recording). The UI
+    builds its buttons from this list instead of a hardcoded set, so a button can never
+    point at a file that was never written."""
+    run = _get_own_or_admin_run(run_id, user)
+    rd = Path(run["result_dir"] or "")
+    if not rd.is_dir():
+        return {"files": []}
+    files = sorted(f.name for f in rd.iterdir()
+                   if f.is_file() and f.name.endswith(_ARTIFACT_SUFFIXES))
+    return {"files": files}
+
+
 @router.get("/runs/{run_id}/artifacts/{fname}")
 def run_artifact(run_id: str, fname: str, user: dict = Depends(auth.require_min("member"))):
     run = _get_own_or_admin_run(run_id, user)

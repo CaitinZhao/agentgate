@@ -224,8 +224,10 @@ def rejudge_run(run: dict) -> dict:
                   score=(str(scores.get("total")) if scores.get("total") is not None
                          else run.get("score") or ""))
     from .report_rebuild import rebuild_base_reports
-    rebuild_base_reports(dict(run, finished_at=run.get("finished_at") or
-                              datetime.datetime.now().isoformat(timespec="seconds")), rd)
+    rebuild_base_reports(dict(run,
+                              started_at=run.get("started_at"),
+                              finished_at=run.get("finished_at")
+                              or datetime.datetime.now().isoformat(timespec="seconds")), rd)
     return {"rejudged": n_judged, "total_items": len(items),
             "changes": changes, "counts": counts, "scores": scores,
             "quality_overridden": len(quality_override)}

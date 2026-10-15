@@ -261,3 +261,33 @@ def test_every_verdict_path_persists_counts():
                                   "target_error": True})):
         row = score_run([_row("x", verdict, judge_out=jo)])["per_case"][0]
         assert "model_calls" in row, "verdict %s lost the count" % verdict
+
+
+def test_null_count_is_unchecked_not_consistent(tmp_path):
+    """A null count is UNKNOWN, not verified: the analyzer can throw and leave
+    analysis={"error": ...}, persisting model_calls=None. Missing key and null must behave
+    identically; only a real number counts as checked, and only a real 0 can contradict."""
+    def run(rows, spans):
+        (tmp_path / "scores.json").write_text(json.dumps({
+            "total": None, "counts": {"pass": 0, "fail": 0, "pending": len(rows), "judged": 0},
+            "run_scores": {"safety": None}, "per_case": rows}), encoding="utf-8")
+        (tmp_path / "spans_raw.json").write_text(json.dumps(spans), encoding="utf-8")
+        return check_artifacts(str(tmp_path))
+
+    llm = lambda cid: {"task_id": cid, "spans": [{"name": "llm.call"}]}
+    # null + own spans -> unchecked warning (was silently "ok")
+    r = run([{"case_id": "D", "verdict": "PENDING", "model_calls": None,
+              "scores": {"safety": None}}], [llm("D")])
+    assert any(f["code"] == "model_calls_unchecked" for f in r["findings"])
+    # missing key behaves the same
+    r2 = run([{"case_id": "E", "verdict": "PENDING", "scores": {"safety": None}}], [llm("E")])
+    assert any(f["code"] == "model_calls_unchecked" for f in r2["findings"])
+    # a real 0 with own spans is still the hard error
+    r3 = run([{"case_id": "F", "verdict": "PASS", "model_calls": 0,
+               "scores": {"safety": 100.0}}], [llm("F")])
+    assert r3["degraded"] is True
+    assert any(f["code"] == "model_calls_contradiction" for f in r3["findings"])
+    # a real 0 with NO spans of its own is clean (audit-only case)
+    r4 = run([{"case_id": "G", "verdict": "PASS", "model_calls": 0,
+               "scores": {"safety": 100.0}}], [{"task_id": "G", "spans": []}])
+    assert r4["ok"] is True and r4["findings"] == []

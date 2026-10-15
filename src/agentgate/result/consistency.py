@@ -137,14 +137,21 @@ def check_artifacts(result_dir: str) -> Dict:
             "%d case(s) archived as 0 model calls while the SAME case holds spans in "
             "spans_raw.json (e.g. %s)"
             % (len(contradicted), ", ".join(contradicted[:3]))))
-    # any case missing the count is UNCHECKED — not silently consistent. Partial coverage
-    # is the common shape (older rows keep the pre-count key set), so warn on ANY miss.
-    unchecked = [c.get("case_id") for c in per_case if "model_calls" not in c]
+    # a case counts as CHECKED only when it carries a NUMBER: a missing key and an explicit
+    # null are the same thing — "the count is unknown" (e.g. the analyzer threw and left
+    # analysis={"error": ...}, so the row persisted model_calls=None). Both must warn; only
+    # a real 0 is a fact, and only a real 0 can contradict spans. Semantics:
+    #   number -> checked (0 is a suspicious CLAIM, anything else is a fact)
+    #   null / missing -> unchecked (unknown, never "consistent")
+    def _unknown(c) -> bool:
+        return c.get("model_calls") is None
+    unchecked = [c.get("case_id") for c in per_case if _unknown(c)]
     if unchecked:
         findings.append(_finding(
             "model_calls_unchecked", "warning",
-            "%d case(s) carry no archived model-call count, so the check skipped them "
-            "(e.g. %s) — regenerate scores.json (or rejudge) to cover them"
+            "%d case(s) carry an unknown model-call count (missing, or null because the "
+            "analyzer failed), so the check skipped them (e.g. %s) — regenerate scores.json "
+            "(or rejudge) to cover them"
             % (len(unchecked), ", ".join(unchecked[:3]))))
     errors = [f for f in findings if f["severity"] == "error"]
     return {"ok": not errors, "degraded": bool(errors), "findings": findings,

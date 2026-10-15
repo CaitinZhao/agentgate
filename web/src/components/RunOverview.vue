@@ -4,8 +4,7 @@
 // The point of these is not decoration: each one answers a question the per-case tables
 // cannot. Metric cards put the headline numbers side by side (including the two readings
 // and their gap), the time split shows WHERE the wall time went, the signal bars rank
-// which dimension actually loses the most points, and the scatter relates tool-call count
-// to token cost per case. All of them read from GET /runs/{id}/view.
+// which dimension actually loses the most points. All read from GET /runs/{id}/view.
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 
@@ -64,23 +63,6 @@ const signalBars = computed(() => {
   return rows.filter((r) => r.n > 0).sort((a, b) => b.n - a.n).map((r) => ({ ...r, pct: (r.n / max) * 100 }));
 });
 
-// ---- tokens vs tool calls, coloured by verdict ----
-const scatter = computed(() => {
-  const rows = (props.view?.cases || []).filter((c: any) => c.tokens > 0);
-  if (!rows.length) return null;
-  const W = 560, H = 190, PAD = 34;
-  const maxX = Math.max(3, ...rows.map((c: any) => c.tool_calls || 0));
-  const maxY = Math.max(1000, ...rows.map((c: any) => c.tokens || 0));
-  const px = (n: number) => PAD + (n / maxX) * (W - PAD - 12);
-  const py = (n: number) => H - PAD - (n / maxY) * (H - PAD - 16);
-  return {
-    W, H, PAD, maxX, maxY,
-    points: rows.map((c: any) => ({
-      x: px(c.tool_calls || 0), y: py(c.tokens || 0), v: c.verdict, id: c.case_id,
-      rawX: c.tool_calls || 0, rawY: c.tokens || 0,
-    })),
-  };
-});
 function fmtTok(n: number): string {
   if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
   if (n >= 1e3) return (n / 1e3).toFixed(1) + "k";
@@ -196,28 +178,6 @@ const buckets = computed(() => {
       </div>
     </div>
 
-    <!-- tokens vs tool calls: does more calling actually buy anything? -->
-    <div class="card" v-if="show('scatter') && scatter">
-      <h4>{{ $t("view.scatterTitle") }}</h4>
-      <svg :viewBox="`0 0 ${scatter.W} ${scatter.H}`" class="scatter">
-        <line :x1="scatter.PAD" :y1="scatter.H - scatter.PAD"
-              :x2="scatter.W - 12" :y2="scatter.H - scatter.PAD" class="axis" />
-        <line :x1="scatter.PAD" :y1="16" :x2="scatter.PAD"
-              :y2="scatter.H - scatter.PAD" class="axis" />
-        <text :x="scatter.W - 60" :y="scatter.H - 8" class="axlab">{{ $t("view.axCalls") }}</text>
-        <text :x="4" y="14" class="axlab">{{ $t("view.axTokens") }}</text>
-        <circle v-for="(p, i) in scatter.points" :key="i" :cx="p.x" :cy="p.y" r="3.4"
-                :class="'dot ' + vclass(p.v)">
-          <title>{{ p.id }} · {{ p.rawX }} calls · {{ p.rawY }} tokens · {{ p.v }}</title>
-        </circle>
-      </svg>
-      <div class="legend">
-        <span><i class="dot ok"></i>{{ $t("verdict.PASS") }}</span>
-        <span><i class="dot bad"></i>{{ $t("verdict.FAIL") }}</span>
-        <span><i class="dot warn"></i>{{ $t("verdict.PENDING") }}</span>
-      </div>
-    </div>
-
     <!-- what the artifacts did not contain: stated, not silently absent -->
     <div class="card gapcard" v-if="show('gaps') && (view.data_gaps || []).length">
       <h4>{{ $t("view.gapsTitle") }}</h4>
@@ -269,15 +229,6 @@ const buckets = computed(() => {
            min-height: 2px; }
 .histlabel { font-size: 10.5px; color: var(--ag-muted); white-space: nowrap; }
 
-.scatter { width: 100%; height: auto; }
-.axis { stroke: var(--ag-line); stroke-width: 1; }
-.axlab { fill: var(--ag-muted); font-size: 10px; }
-.dot { fill: var(--ag-primary); }
-.dot.ok { fill: var(--ag-ok); } .dot.bad { fill: var(--ag-bad); } .dot.warn { fill: var(--ag-warn); }
-.legend { display: flex; gap: 14px; font-size: 12px; color: var(--ag-muted); margin-top: 6px; }
-.legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
-.legend i.dot { fill: none; } .legend i.ok { background: var(--ag-ok); }
-.legend i.bad { background: var(--ag-bad); } .legend i.warn { background: var(--ag-warn); }
 
 .gapcard { border-style: dashed; }
 .gaps { display: flex; flex-wrap: wrap; gap: 7px; }

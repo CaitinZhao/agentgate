@@ -494,13 +494,6 @@ function dl(fname: string) {
         </div>
       </div>
 
-      <!-- requested here specifically: the tool-call / token relation, in the report tab -->
-      <div class="card" v-if="view && view.metrics">
-        <h4>{{ $t("view.scatterTitle") }}</h4>
-        <div class="muted" style="margin-bottom: 6px">{{ $t("view.scatterHint") }}</div>
-        <RunOverview :view="view" :parts="['scatter']" />
-      </div>
-
       <div class="card md-body" v-html="md(reportText)"></div>
     </template>
 

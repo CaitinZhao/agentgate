@@ -197,3 +197,67 @@ def test_change_and_enum_cases_stay_free_text():
     v, why = quantity_value("changed from 20% in FY2021 to 23% in FY 2022.",
                             "How much has the effective tax rate changed between FY2021 and FY2022?")
     assert v is None and "change" in why
+
+
+def test_mixed_archive_does_not_false_positive(tmp_path):
+    """OTel spans and the in-response audit coexist: a case that legitimately has 0 model
+    calls and no spans of its OWN must not be flagged just because a sibling case has spans.
+    (The guard must join PER CASE, not compare the two sets globally.)"""
+    (tmp_path / "scores.json").write_text(json.dumps({
+        "total": 80.0, "counts": {"pass": 2, "fail": 0, "pending": 0, "judged": 2},
+        "run_scores": {"safety": 100.0},
+        "per_case": [{"case_id": "A", "verdict": "PASS", "model_calls": 5,
+                      "scores": {"safety": 100.0}},
+                     {"case_id": "B", "verdict": "PASS", "model_calls": 0,
+                      "scores": {"safety": 100.0}}]}), encoding="utf-8")
+    (tmp_path / "spans_raw.json").write_text(json.dumps([
+        {"task_id": "A", "spans": [{"name": "llm.call"}]},
+        {"task_id": "B", "spans": []}]), encoding="utf-8")
+    res = check_artifacts(str(tmp_path))
+    assert res["ok"] is True, res
+    assert not any(f["code"] == "model_calls_contradiction" for f in res["findings"])
+
+
+def test_contradiction_is_per_case(tmp_path):
+    """A true contradiction is one where the SAME case reports 0 and holds spans."""
+    (tmp_path / "scores.json").write_text(json.dumps({
+        "total": None, "counts": {"pass": 1, "fail": 0, "pending": 0, "judged": 1},
+        "run_scores": {"safety": 100.0},
+        "per_case": [{"case_id": "B", "verdict": "PASS", "model_calls": 0,
+                      "scores": {"safety": 100.0}}]}), encoding="utf-8")
+    (tmp_path / "spans_raw.json").write_text(json.dumps(
+        [{"task_id": "B", "spans": [{"name": "llm.call"}]}]), encoding="utf-8")
+    res = check_artifacts(str(tmp_path))
+    assert res["degraded"] is True
+    assert any(f["code"] == "model_calls_contradiction" for f in res["findings"])
+
+
+def test_partial_missing_counts_warn_and_name_cases(tmp_path):
+    """A PARTIAL miss must warn too: older rows keep the pre-count key set, so skipping
+    them silently would leave ~20% of a run unchecked."""
+    (tmp_path / "scores.json").write_text(json.dumps({
+        "total": None, "counts": {"pass": 1, "fail": 0, "pending": 1, "judged": 1},
+        "run_scores": {"safety": 100.0},
+        "per_case": [{"case_id": "A", "verdict": "PASS", "model_calls": 5,
+                      "scores": {"safety": 100.0}},
+                     {"case_id": "B", "verdict": "PENDING",
+                      "scores": {"safety": None}}]}), encoding="utf-8")
+    (tmp_path / "spans_raw.json").write_text(json.dumps([
+        {"task_id": "A", "spans": [{"name": "llm.call"}]},
+        {"task_id": "B", "spans": [{"name": "llm.call"}]}]), encoding="utf-8")
+    res = check_artifacts(str(tmp_path))
+    warn = next(f for f in res["findings"] if f["code"] == "model_calls_unchecked")
+    assert "B" in warn["detail"] and warn["severity"] == "warning"
+
+
+def test_every_verdict_path_persists_counts():
+    """Every score_case return path must carry the counts: a row missing them makes the
+    guard skip it, and a skip is how 19% of a run stayed unverified."""
+    from agentgate.analysis.scores import score_run
+    for verdict, jo in (("PASS", {"process": {"n_model_calls": 5, "n_tool_calls": 3}}),
+                        ("PENDING", {"process": {"n_model_calls": 2, "n_tool_calls": 1}}),
+                        ("SKIPPED", {}),
+                        ("FAIL", {"process": {"n_model_calls": 4, "n_tool_calls": 2},
+                                  "target_error": True})):
+        row = score_run([_row("x", verdict, judge_out=jo)])["per_case"][0]
+        assert "model_calls" in row, "verdict %s lost the count" % verdict

@@ -38,7 +38,12 @@ def check_summary(scores: Dict, case_rows: List[Dict], meta: Dict = None) -> Dic
         findings.append(_finding("total_without_judgement", "error",
                                  "a total (%s) was produced but 0 cases were judged" % scores["total"]))
 
-    # 2) model calls counted 0 while the trace carries llm spans
+    # 2) model calls counted 0 while the trace carries llm spans.
+    # DEFENSE IN DEPTH ONLY — do not rely on this one: analyze_case derives both fields
+    # from the same trace, so within a single in-memory run `has_model_calls` implies a
+    # non-zero count and this condition is effectively unreachable by construction. The
+    # guard that actually works runs against the ARCHIVED counts (check_artifacts), where
+    # the count written during the run can genuinely disagree with the spans on disk.
     for row in case_rows:
         a = row.get("analysis") or {}
         if a.get("has_model_calls") and not a.get("n_model_calls"):
@@ -82,8 +87,11 @@ def check_summary(scores: Dict, case_rows: List[Dict], meta: Dict = None) -> Dic
 def check_artifacts(result_dir: str) -> Dict:
     """Re-run the cross-checks against the ARCHIVED artifacts (used by rejudge/rebuild).
 
-    Only the checks that need no per-case scorer input live here: totals vs counts, and
-    the model-call contradiction read back from analysis.md vs spans_raw.json presence.
+    This is the guard that actually runs the model-call check: it joins each case's
+    archived model-call count (per_case.model_calls, persisted by the scorer) against that
+    SAME case's spans in spans_raw.json. A case missing the count is reported as
+    `model_calls_unchecked` rather than passing silently; cases without spans of their own
+    (audit-only targets) are never flagged just because a sibling case has spans.
     """
     import json
     from pathlib import Path
@@ -113,29 +121,31 @@ def check_artifacts(result_dir: str) -> Dict:
         spans = json.loads((rd / "spans_raw.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         spans = []
-    spans_with_data = [s for s in spans if (s.get("spans") or [])]
-    if spans_with_data:
-        per_case = scores.get("per_case") or []
-        # A case archived as "0 model calls" while the span evidence shows LLM activity is
-        # the original bug (report stating a fact its own evidence contradicts). The count
-        # is read from the ARCHIVE (per_case.model_calls, persisted by the scorer); a case
-        # with no such field cannot be checked and must not silently pass as consistent.
-        zero_claims = [c.get("case_id") for c in per_case
-                       if c.get("model_calls") == 0]
-        if zero_claims:
-            findings.append(_finding(
-                "model_calls_contradiction", "error",
-                "%d archived case(s) report 0 model calls while spans_raw.json holds spans "
-                "for %d case(s) (e.g. %s)" % (len(zero_claims), len(spans_with_data),
-                                              ", ".join(zero_claims[:3]))))
-        else:
-            unchecked = [c.get("case_id") for c in per_case if "model_calls" not in c]
-            if unchecked and len(unchecked) == len(per_case):
-                findings.append(_finding(
-                    "model_calls_unchecked", "warning",
-                    "no archived case carries a model-call count (%d cases): the model-call "
-                    "consistency check could not run — regenerate scores.json to enable it"
-                    % len(unchecked)))
+    # join PER CASE: a case reporting 0 is only contradicted when THAT case archived spans
+    # of its own. OTel export and the in-response audit are two coexisting channels, so a
+    # mixed archive (some cases with spans, some audited-only) is normal — comparing the
+    # two sets globally would flag an honest audited-only case just because a sibling has
+    # spans. Both the verdict and the message must be per-case or they are misleading.
+    spans_by_case = {s.get("task_id"): len(s.get("spans") or []) for s in spans}
+    per_case = scores.get("per_case") or []
+    contradicted = [c.get("case_id") for c in per_case
+                    if c.get("model_calls") == 0
+                    and spans_by_case.get(c.get("case_id"), 0) > 0]
+    if contradicted:
+        findings.append(_finding(
+            "model_calls_contradiction", "error",
+            "%d case(s) archived as 0 model calls while the SAME case holds spans in "
+            "spans_raw.json (e.g. %s)"
+            % (len(contradicted), ", ".join(contradicted[:3]))))
+    # any case missing the count is UNCHECKED — not silently consistent. Partial coverage
+    # is the common shape (older rows keep the pre-count key set), so warn on ANY miss.
+    unchecked = [c.get("case_id") for c in per_case if "model_calls" not in c]
+    if unchecked:
+        findings.append(_finding(
+            "model_calls_unchecked", "warning",
+            "%d case(s) carry no archived model-call count, so the check skipped them "
+            "(e.g. %s) — regenerate scores.json (or rejudge) to cover them"
+            % (len(unchecked), ", ".join(unchecked[:3]))))
     errors = [f for f in findings if f["severity"] == "error"]
     return {"ok": not errors, "degraded": bool(errors), "findings": findings,
             "n_errors": len(errors)}

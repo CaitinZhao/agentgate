@@ -112,8 +112,17 @@ def rejudge_run(run: dict) -> dict:
             results.append(orig_results.get(cid) or {
                 "task_id": cid, "scores": {"deterministic_pass": True, "rule_pass": True,
                                            "human_review": None}})
-            case_rows.append({"case_id": cid, "verdict": it["verdict"], "judge_out": {},
-                              "analysis": {}, "tokens": it.get("tokens") or 0,
+            # keep the archived counts even when the case cannot be replayed: without them
+            # the row is "unchecked" for the model-call consistency guard (a SKIPPED case
+            # legitimately has none, a case whose bank/gold disappeared still does)
+            arch = spans.get(cid) or []
+            n_llm = sum(1 for s in arch
+                        if str(s.get("name", "")).startswith("llm."))
+            case_rows.append({"case_id": cid, "verdict": it["verdict"],
+                              "judge_out": {"process": {"n_model_calls": n_llm,
+                                                        "n_tool_calls": None}},
+                              "analysis": {"n_model_calls": n_llm},
+                              "tokens": it.get("tokens") or 0,
                               "wall_s": it.get("wall_time_s") or 0.0, "asi": it.get("asi") or "",
                               "stability": None, "suite": it.get("bank") or "", "origin": ""})
             continue
